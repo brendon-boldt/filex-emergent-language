@@ -1,25 +1,26 @@
 import sys
 
-from stable_baselines3 import DQN, PPO  # type: ignore
+from stable_baselines3 import DQN, PPO, A2C  # type: ignore
 from stable_baselines3.common.evaluation import evaluate_policy  # type: ignore
 from stable_baselines3.dqn import CnnPolicy  # type: ignore
-
-from stable_baselines3.common.vec_env import SubprocVecEnv  # type: ignore
+from stable_baselines3.common import callbacks  # type: ignore
+from stable_baselines3.common.vec_env import SubprocVecEnv, VecTransposeImage, DummyVecEnv  # type: ignore
 from stable_baselines3.common.cmd_util import make_vec_env  # type: ignore
 from stable_baselines3.common.utils import set_random_seed  # type: ignore
 
 import env as E
-from nn import BasicCnn
+import nn
+
 
 def make_env(env_constructor, rank, seed=0):
     def _init():
         env = env_constructor()
         env.seed(seed + rank)
         return env
+
     set_random_seed(seed)
     return _init
 
-N_PROC = 8
 
 """ Scratch
 {DQN, A2C, PPO} * {CNN, MLP} * {direct, pixel}
@@ -32,46 +33,57 @@ DQN CNN pixel (200k, 200k) - 11
 DQN MLP pixel (200k, 200k) - 14
 DQN MLP direct (200k, 200k) - 6
 
+
+On direct 4x4, A2C gets 50% after 1.3m @ 8/16 processes with 32k/16k udpates
 """
 
+N_PROC = 8
 
 if __name__ == "__main__":
     alg = DQN
+    # alg = A2C
+    # alg = PPO
     policy_kwargs = {
-        # "features_extractor_class": BasicCnn,
-        # "net_arch": [64] * 3,
-        "net_arch": [100] * 2,
+        # "features_extractor_class": nn.BasicCnn,
+        "features_extractor_class": nn.SimpleCnn,
+        "net_arch": [64] * 2,
     }
     # env_lam = lambda: E.Discrete(grid_size=4)
-    env_lam = lambda: E.Discrete(grid_size=3)
-    # env_lam = lambda: E.DiscreteAbsolute(grid_size=4)
+    env_lam = lambda: VecTransposeImage(DummyVecEnv([lambda: E.DiscreteAbsolute(grid_size=4)]))
     if len(sys.argv) >= 2 and sys.argv[1] == "train":
         # env = SubprocVecEnv([make_env(env_lam, i) for i in range(N_PROC)])
-        env = env_lam()
+        env_eval = env_lam()
+        env = env_eval
 
-        learning_starts = 300_000
-        policy_steps = 200_000
+
+        learning_starts = 200_000
+        policy_steps = 300_000
         model = alg(
-            # "CnnPolicy",
-            "MlpPolicy",
+            "CnnPolicy",
+            # "MlpPolicy",
             env,
             learning_starts=learning_starts,
             learning_rate=1e-3,
-            verbose=1,
             policy_kwargs=policy_kwargs,
         )
-        model.learn(total_timesteps=int(policy_steps + learning_starts))
-        model.save("dqn_discrete")
+        model.learn(
+            total_timesteps=int(policy_steps + learning_starts),
+            log_interval=5_000,
+            callback=[
+                callbacks.EvalCallback(
+                    eval_env=env_eval, n_eval_episodes=100, eval_freq=20_000
+                )
+            ],
+        )
+        model.save("model-save")
         # We can't use a vectorized env for eval
-        env = env_lam()
-        mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=1000)
+        mean_reward, std_reward = evaluate_policy(model, env_eval, n_eval_episodes=1000)
         print(mean_reward, std_reward)
 
         del model
         exit()
 
-
-    model = alg.load("dqn_discrete")
+    model = alg.load("model-save")
     env = env_lam()
     mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
     print(mean_reward, std_reward)

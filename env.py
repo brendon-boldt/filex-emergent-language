@@ -35,8 +35,8 @@ class Discrete(gym.Env):
         self.grid_size = grid_size
         # turn left, turn right, move forward, stop
         self.action_space = spaces.Discrete(4)
-        os_low = np.array([[-0.0, -0.0], [-1.0, -1.0], [-0.0, -0.0]])
-        # os_low = np.array([[-1.0, -1.0], [-1.0, -1.0]])
+        # os_low = np.array([[-0.0, -0.0], [-1.0, -1.0], [-0.0, -0.0]])
+        os_low = np.array([[-1.0, -1.0], [-1.0, -1.0]])
         self.observation_space = spaces.Box(low=os_low, high=1.0)
 
         self.max_steps = 40
@@ -67,20 +67,20 @@ class Discrete(gym.Env):
 
     def _get_observation(self) -> StepResult:
         angle = self.orientation * np.pi / 2
-        observation = np.array(
-            [
-                self.location / self.grid_size,
-                [np.cos(angle), np.sin(angle)],
-                self.goal_location / self.grid_size,
-            ]
-        )
-        diff = (self.location - self.goal_location) / self.grid_size
         # observation = np.array(
         #     [
-        #         diff,
+        #         self.location / self.grid_size,
         #         [np.cos(angle), np.sin(angle)],
+        #         self.goal_location / self.grid_size,
         #     ]
         # )
+        diff = (self.location - self.goal_location) / self.grid_size
+        observation = np.array(
+            [
+                diff,
+                [np.cos(angle), np.sin(angle)],
+            ]
+        )
         reward = 0.0
         if self.stop:
             # reward = 1.0 if (self.location == self.goal_location).all() else -2.0
@@ -127,7 +127,7 @@ class DiscreteAbsolute(gym.Env):
         super(DiscreteAbsolute, self).__init__()
         self.grid_size = grid_size
         self.action_space = spaces.Discrete(4)
-        channels = 2
+        channels = 3
         obs_shape = (self.grid_size, self.grid_size, channels)
         self.observation_space = spaces.Box(low=0, high=255, shape=obs_shape, dtype=np.uint8)
 
@@ -159,16 +159,20 @@ class DiscreteAbsolute(gym.Env):
 
     def _get_observation(self) -> StepResult:
         _observation = np.zeros(self.observation_space.shape)
-        # Channel 0: agent, 1: goal
-        _observation[tuple(self.location) + (0,)] = 1.0 - EPSILON
-        next_location = np.array((0, 1) if self.orientation % 2 else (0, 1))
+        # Channel 0: agent, 1: agent next, 2: goal
+        # x and y are reversed when indexing; maybe I should change this?
+        _observation[self.location[1], self.location[0], 0] = 1.0 - EPSILON
+        next_location = np.array((1, 0) if not self.orientation % 2 else (0, 1))
         next_location *= 1 if self.orientation < 2 else -1
         next_location += self.location
         if (next_location >= 0).all() and (next_location < self.grid_size).all():
-            _observation[next_location[0], next_location[1], 0] = 0.5
+            # _observation[next_location[0], next_location[1], 0] = 0.5
+            _observation[next_location[1], next_location[0], 1] = 1.0 - EPSILON
         # Differentiate from zero padding
-        _observation[..., 1] = 0.1
-        _observation[tuple(np.concatenate([self.goal_location, [1]]))] = 1.0 - EPSILON
+        _observation[..., 2] = 0.1
+        _observation[self.goal_location[1], self.goal_location[0], 2] = 1.0 - EPSILON
+        # print(self.location, next_location, self.orientation)
+        # breakpoint()
         observation = (_observation * 255).astype(np.uint8)
 
         diff = (self.location - self.goal_location) / self.grid_size
@@ -287,33 +291,21 @@ class Continuous(gym.Env):
         print(f"{'goal':20s} {self.goal_location[0]:.3f} {self.goal_location[1]:.3f}")
 
 
-def d_random_walk():
-    env = Discrete()
-    env.reset()
-    env.render()
-    for i in range(10):
-        # action = np.random.default_rng().integers(0, 3)
-        action = 0
-        env.step(action)
-        print(action)
-        env.render()
-        print()
 
+def test_disc_abs():
+    env = DiscreteAbsolute(grid_size = 3)
+    obs = env.reset()
+    print(obs.transpose(-1, 0, 1)[:2])
+    stop = False
+    i = 0
+    while not stop:
+        action = i % 2
+        i  = (i + 1) % 2
+        obs, _, stop, _ = env.step(action)
+        print(action, env.orientation)
+        print(obs.transpose(-1, 0, 1)[:2])
 
-def c_random_walk():
-    env = Continuous()
-    env.reset()
-    env.render()
-    for i in range(100):
-        # action = np.random.default_rng().integers(0, 3)
-        action = np.array([1.0, 0.5])
-        env.step(action)
-        if not i % 10:
-            env.render()
-            print()
 
 
 if __name__ == "__main__":
-    # TODO Add done action
-    # c_random_walk()
-    d_random_walk()
+    test_disc_abs()
