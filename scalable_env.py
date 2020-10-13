@@ -6,18 +6,15 @@ eps = 1e-8
 
 
 class PerceptionNet(nn.Module):
-    def __init__(self, log_scale, output_ratio):
+    def __init__(self, out_size, input_lsize, ratio):
         super(PerceptionNet, self).__init__()
-        self.log_scale = log_scale
-        self.output_ratio = output_ratio
+        self.out_size = out_size
+        self.input_lsize = input_lsize
 
         layers = []
         chans_in = 1
-        for i in range(self.log_scale):
-            if i == 0:
-                chans_out = self.output_ratio * chans_in
-            else:
-                chans_out = 2 * chans_in
+        for i in reversed(range(0, self.input_lsize)):
+            chans_out = ratio * (self.out_size - i)
             layers.append(nn.Conv1d(chans_in, chans_out, 3, padding=1))
             layers.append(nn.AvgPool1d(2, 2))
             chans_in = chans_out
@@ -81,6 +78,7 @@ def sample_worlds():
     # 2 ** 7 == 128 steps to get across the world
     continuous_small_step = ScalableEnv(lsize=7, obs_lscale=7, action_scale=1)
 
+
 def test_world():
     env = ScalableEnv(lsize=2, obs_lscale=3, action_scale=2)
     print(env.get_observation())
@@ -88,14 +86,14 @@ def test_world():
         env.do_action(0.8)
         print(env.get_observation())
 
+
 def model_sizes():
     for i in range(1, 11):
-        pn = PerceptionNet(i, 2)
-        inp = torch.zeros(2 ** pn.log_scale)
-        print(pn(inp).shape)
+        pn = PerceptionNet(10, i, 2)
+        inp = torch.zeros(2 ** i)
+        # print(pn)
         print(np.sum([np.prod(x.size()) for x in pn.parameters()]))
-
-
+        print(pn(inp).shape)
 
 
 if __name__ == "__main__":
