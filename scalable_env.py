@@ -1,6 +1,6 @@
-import torch
+import torch  # type: ignore
 from torch import nn
-import numpy as np
+import numpy as np  # type: ignore
 
 eps = 1e-8
 
@@ -48,7 +48,7 @@ class ScalableEnv:
 
     def get_observation(self) -> np.ndarray:
         obs = np.zeros(self.obs_dim, dtype=np.float32)
-        if self.lscale >= self.obs_lscale:
+        if self.lsize >= self.obs_lscale:
             obs_loc = self.location // (self.size // self.obs_dim)
         else:
             raise NotImplementedError()

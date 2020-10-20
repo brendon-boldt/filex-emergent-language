@@ -1,3 +1,5 @@
+from typing import List
+
 import gym  # type: ignore
 from torch import nn  # type: ignore
 import torch as th
@@ -6,6 +8,41 @@ from stable_baselines3.common.torch_layers import (  # type: ignore
     is_image_space,
 )
 
+class Perceptron(nn.Module):
+    def __init__(self, sizes: List[int]) -> None:
+        super(self.__class__, self).__init__()
+        self.sizes = sizes
+
+        layers: List[nn.Module] = []
+        for i in range(len(sizes) - 1):
+            layers.append(nn.Linear(sizes[i], sizes[i+1], bias=False))
+        self.model = nn.Sequential(*layers)
+
+    def forward(self, x) -> th.Tensor:
+        x = self.model(x)
+        return x
+
+class Cnn1D(nn.Module):
+    def __init__(self, out_size, input_lsize, ratio, channels) -> None:
+        super(self.__class__, self).__init__()
+        self.out_size = out_size
+        self.input_lsize = input_lsize
+
+        assert self.out_size >= self.input_lsize
+        layers = []
+        chans_in = channels
+        for i in reversed(range(0, self.input_lsize)):
+            chans_out = ratio * (self.out_size - i)
+            layers.append(nn.Conv1d(chans_in, chans_out, 3, padding=1))
+            layers.append(nn.AvgPool1d(2, 2))
+            chans_in = chans_out
+        self.model = nn.Sequential(*layers)
+
+    def forward(self, x) -> th.Tensor:
+        # x = x.view((1, 1, -1))
+        # x.unsqueeze_(1)
+        x = self.model(x)
+        return x.transpose(2, 1)
 
 class BasicCnn(BaseFeaturesExtractor):
     """
