@@ -1,6 +1,6 @@
 import sys
 
-from stable_baselines3 import DQN, PPO, A2C  # type: ignore
+from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
 from stable_baselines3.common.evaluation import evaluate_policy  # type: ignore
 from stable_baselines3.dqn import CnnPolicy  # type: ignore
 from stable_baselines3.common import callbacks  # type: ignore
@@ -37,24 +37,25 @@ DQN MLP direct (200k, 200k) - 6
 On direct 4x4, A2C gets 50% after 1.3m @ 8/16 processes with 32k/16k udpates
 """
 
-N_PROC = 8
+N_PROC = 1
 
 if __name__ == "__main__":
-    alg = DQN
+    # alg = DQN
     # alg = A2C
     # alg = PPO
+    alg = SAC
     policy_kwargs = {
         # "features_extractor_class": nn.BasicCnn,
         "features_extractor_class": nn.SimpleCnn,
-        "net_arch": [64] * 2,
+        "net_arch": [0x20] * 2,
     }
     # env_lam = lambda: E.Discrete(grid_size=4)
-    env_lam = lambda: VecTransposeImage(DummyVecEnv([lambda: E.DiscreteAbsolute(grid_size=4)]))
+    # env_lam = lambda: VecTransposeImage(DummyVecEnv([lambda: E.DiscreteAbsolute(grid_size=4)]))
+    env_lam = lambda: VecTransposeImage(DummyVecEnv([lambda: E.Orientationless(grid_size=3)]))
     if len(sys.argv) >= 2 and sys.argv[1] == "train":
         # env = SubprocVecEnv([make_env(env_lam, i) for i in range(N_PROC)])
         env_eval = env_lam()
         env = env_eval
-
 
         learning_starts = 200_000
         policy_steps = 300_000
@@ -62,16 +63,18 @@ if __name__ == "__main__":
             "CnnPolicy",
             # "MlpPolicy",
             env,
-            learning_starts=learning_starts,
-            learning_rate=1e-3,
+            # learning_starts=learning_starts,
+            # n_steps=10,
+            # learning_rate=1e-4,
             policy_kwargs=policy_kwargs,
+            verbose=0,
         )
         model.learn(
             total_timesteps=int(policy_steps + learning_starts),
-            log_interval=5_000,
+            # log_interval=5_000,
             callback=[
                 callbacks.EvalCallback(
-                    eval_env=env_eval, n_eval_episodes=100, eval_freq=20_000
+                    eval_env=env_eval, n_eval_episodes=1000, eval_freq=1_000
                 )
             ],
         )

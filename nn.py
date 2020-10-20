@@ -59,7 +59,7 @@ class SimpleCnn(BaseFeaturesExtractor):
         assert is_image_space(observation_space)
         n_input_channels = observation_space.shape[0]
         self.cnn = nn.Sequential(
-            nn.Conv2d(n_input_channels, 0x20, kernel_size=3, stride=1, padding=0),
+            nn.Conv2d(n_input_channels, 0x20, kernel_size=2, stride=1, padding=0),
             nn.ReLU(),
             nn.Conv2d(0x20, 0x20, kernel_size=1, stride=1, padding=0),
             nn.ReLU(),
