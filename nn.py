@@ -8,6 +8,7 @@ from stable_baselines3.common.torch_layers import (  # type: ignore
     is_image_space,
 )
 
+
 class Perceptron(nn.Module):
     def __init__(self, sizes: List[int]) -> None:
         super(self.__class__, self).__init__()
@@ -15,26 +16,41 @@ class Perceptron(nn.Module):
 
         layers: List[nn.Module] = []
         for i in range(len(sizes) - 1):
-            layers.append(nn.Linear(sizes[i], sizes[i+1], bias=False))
+            layers.append(nn.Linear(sizes[i], sizes[i + 1], bias=False))
+            if i != len(sizes) - 2:
+                layers.append(nn.ReLU())
         self.model = nn.Sequential(*layers)
 
     def forward(self, x) -> th.Tensor:
         x = self.model(x)
-        return x
+        return th.tanh(x)
 
-class Cnn1D(nn.Module):
-    def __init__(self, out_size, input_lsize, ratio, channels) -> None:
+
+class ScalableCnn(nn.Module):
+    def __init__(self, dim, out_size, input_lsize, ratio, channels) -> None:
         super(self.__class__, self).__init__()
+        # Maybe we'll get to 3 one day
+        assert dim == 1 or dim == 2
+        self.dim = dim
         self.out_size = out_size
         self.input_lsize = input_lsize
+
+        if self.dim == 1:
+            conv = nn.Conv1d
+            pool = nn.AvgPool1d
+        elif self.dim == 2:
+            conv = nn.Conv2d
+            pool = nn.AvgPool2d
 
         assert self.out_size >= self.input_lsize
         layers = []
         chans_in = channels
         for i in reversed(range(0, self.input_lsize)):
             chans_out = ratio * (self.out_size - i)
-            layers.append(nn.Conv1d(chans_in, chans_out, 3, padding=1))
-            layers.append(nn.AvgPool1d(2, 2))
+            layers.append(conv(chans_in, chans_out, 3, padding=1))
+            layers.append(pool(2, 2))
+            if i != 0:
+                layers.append(nn.Tanh())
             chans_in = chans_out
         self.model = nn.Sequential(*layers)
 
@@ -42,7 +58,10 @@ class Cnn1D(nn.Module):
         # x = x.view((1, 1, -1))
         # x.unsqueeze_(1)
         x = self.model(x)
-        return x.transpose(2, 1)
+        x = x.flatten(1)
+        # return x.transpose(2, 1)
+        return x
+
 
 class BasicCnn(BaseFeaturesExtractor):
     """

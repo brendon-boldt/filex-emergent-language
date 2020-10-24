@@ -1,4 +1,5 @@
 import sys
+from typing import Any
 
 from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
 from stable_baselines3.common.evaluation import evaluate_policy  # type: ignore
@@ -96,12 +97,125 @@ def full_test():
                 break
 
 
+device = "cuda:0"
+
+
+def make_2d_policy(env) -> Any:
+    lr = 5e-4
+    n_epochs = 200
+    cnn_ratio = 2
+    # ((2 ** s) * (2 ** s)) ** 2
+    # 0x4000
+    data_len = 2 ** (env.lsize * 4)
+    batch_size = 2 ** 9
+
+    cnn_out_size = env.lsize
+    percpetion_model = nn.ScalableCnn(2, cnn_out_size, env.lsize, cnn_ratio, 2)
+    policy_model = nn.Perceptron([cnn_out_size * cnn_ratio, 0x20, 0x20, 0x20, 2])
+    model = torch.nn.Sequential(percpetion_model, policy_model)
+    loss_fn = torch.nn.MSELoss(reduction="mean")
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    rng = np.random.default_rng()
+    data_y = []
+    data_x = []
+    # TODO Let the environment generate the data.
+    for _ in range(data_len):
+        loc = rng.integers(0, env.size, 2)
+        gloc = rng.integers(0, env.size, 2)
+        while (loc == gloc).all():
+            gloc = rng.integers(0, env.size, 2)
+        data_x.append(np.zeros((2, env.size, env.size), dtype=np.float32))
+        # TODO Figure out correct dtype
+        data_x[-1][0, loc[0], loc[1]] = 1.0
+        data_x[-1][1, gloc[0], gloc[1]] = 1.0
+        diff = np.array(gloc - loc, dtype=np.float32)
+        # y_gold = diff / (diff ** 2).sum() ** 0.5
+        # Discretize angle
+        disc_angle = (np.pi / 2) * (
+            (np.round(2 * np.arctan2(*(gloc - loc)) / (np.pi)) + 4) % 4
+        )
+        y_gold = np.array([np.sin(disc_angle), np.cos(disc_angle)])
+        data_y.append(y_gold)
+
+    model.to(device)
+    data_x = torch.FloatTensor(data_x).to(device)
+    data_y = torch.FloatTensor(data_y).to(device)
+
+    for epoch in range(n_epochs):
+        running_loss = 0
+        for i, idx in enumerate(
+            rng.choice(len(data_x), len(data_x)).reshape(-1, batch_size)
+        ):
+            y_pred = model(data_x[idx])
+            loss = loss_fn(data_y[idx], y_pred)
+            running_loss += (loss - running_loss) / (i + 1)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+        print(f"epoch {epoch:03d}  loss: {running_loss:.3f}")
+
+    for i in range(0):
+        pred = model(data_x[[i]]).detach()[0]
+        print(data_x[i])
+        print(data_y[i])
+        print(pred)
+        print(loss_fn(data_y[i], pred))
+        print()
+
+    return model
+
+
+def test_2d():
+    lsize = 4
+    size = 2 ** lsize
+    cnn_out_size = lsize
+    action_scale = 1
+    env = E.Scalable(lsize=lsize, obs_lscale=lsize, action_scale=action_scale)
+
+    train_model = True
+    model_path = "model.pt"
+    if train_model:
+        model = make_2d_policy(env)
+        torch.save(model, model_path)
+    else:
+        model = torch.load(model_path)
+
+    model.eval()
+    succs = 0
+    n_episodes = 100
+    verbose = False
+    for i in range(n_episodes):
+        done = False
+        obs = env.reset()
+        if verbose:
+            print("goal")
+            print(env.goal_location)
+        while not done:
+            obs = (
+                torch.FloatTensor(np.moveaxis(obs, -1, 0)).to(device).unsqueeze(0)
+                / 255.0
+            )
+            # print(np.unravel_index(obs[0, 0].argmax(), obs.shape[2:]))
+            if verbose:
+                print(env.location)
+            with torch.no_grad():
+                action = model(obs)[0].cpu().numpy()
+            if verbose:
+                print(action)
+            # print(action)
+            obs, reward, done, _ = env.step(action)
+        succs += reward > 80
+    if verbose:
+        print(env.goal_location)
+    print(succs / n_episodes)
+
+
 def test_1d() -> None:
     lsize = 5
     size = 2 ** lsize
     cnn_out_size = lsize
     cnn_ratio = 1
-    percpetion_model = nn.Cnn1D(cnn_out_size, lsize, cnn_ratio, 2)
+    percpetion_model = nn.ScalableCnn(1, cnn_out_size, lsize, cnn_ratio, 2)
     policy_model = nn.Perceptron([cnn_out_size * cnn_ratio, 10, 1])
     model = torch.nn.Sequential(percpetion_model, policy_model)
     loss_fn = torch.nn.MSELoss(reduction="mean")
@@ -134,5 +248,7 @@ def test_1d() -> None:
             optimizer.step()
         print(f"epoch {epoch:03d}  loss: {running_loss:.3f}")
 
-if __name__ == '__main__':
-    test_1d()
+
+if __name__ == "__main__":
+    # test_1d()
+    test_2d()
