@@ -112,6 +112,7 @@ class Scalable(gym.Env):
         action_scale: int = None,
         max_steps: int = None,
         single_step=False,
+        eval_reward=False,
     ):
         super(self.__class__, self).__init__()
 
@@ -142,6 +143,7 @@ class Scalable(gym.Env):
 
         # If true, use a toy environment with one-step episodes
         self.single_step = single_step
+        self.eval_reward = eval_reward
 
         channels = 2
         obs_shape = (*2 * (self.size,), channels)
@@ -175,21 +177,29 @@ class Scalable(gym.Env):
         dist = (diff ** 2).sum() ** 0.5
         prev_diff = (prev_location - self.goal_location) / self.size
         prev_dist = (prev_diff ** 2).sum() ** 0.5
-        if self.single_step:
+
+        if (self.num_steps > 0 and dist < 1e-3) or self.num_steps > self.max_steps:
+            self.stop = True
+
+        if self.eval_reward:
+            reward = float(self.stop and (dist < 1e-3))
+        elif self.single_step:
             reward = 1.0 if dist < prev_dist else -1.0
+            self.stop = True
         else:
             reward = 0.0
-            if (self.num_steps > 0 and dist < 1e-3) or self.num_steps > self.max_steps:
-                self.stop = True
+            reward += 0.01 if dist < prev_dist else -0.02
             if self.stop:
                 if dist < 1e-3:
-                    reward += 100.0
+                    reward += 1.0
                 else:
-                    reward += -10.0
+                    reward += 0
+                    # reward += -10.0
             else:
-                reward += 1. if dist < prev_dist else -2.
+                pass
+                # reward += 1. if dist < prev_dist else -2.
         info: Dict[str, Any] = {}
-        return observation, reward, self.stop or self.single_step, info
+        return observation, reward, self.stop, info
 
     def step(self, action: np.ndarray) -> StepResult:
         if self.stop:

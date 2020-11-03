@@ -27,27 +27,26 @@ def make_env(env_constructor, rank, seed=0):
 
 
 def full_test() -> None:
-    N_PROC = 1
+    N_PROC = 4
 
     # alg = DQN
     # alg = A2C
     alg = PPO
     # alg = SAC
+    env_kwargs = {"lsize": 5, "single_step": False}
     env_lam = lambda: VecTransposeImage(
-        # DummyVecEnv([lambda: E.Orientationless(grid_size=3)])
-        DummyVecEnv([lambda: E.Scalable(lsize=5, single_step = True)])
+        DummyVecEnv([lambda: E.Scalable(**env_kwargs)])
     )
     policy_kwargs = {
-        # "features_extractor_class": nn.BasicCnn,
         "features_extractor_class": partial(nn.ScalableCnn, out_size=0x20, ratio=2),
         "net_arch": [0x20] * 2,
     }
-    # env_lam = lambda: E.Discrete(grid_size=4)
-    # env_lam = lambda: VecTransposeImage(DummyVecEnv([lambda: E.DiscreteAbsolute(grid_size=4)]))
     if len(sys.argv) >= 2 and sys.argv[1] == "train":
-        # env = SubprocVecEnv([make_env(env_lam, i) for i in range(N_PROC)])
-        env_eval = env_lam()
-        env = env_eval
+        env = SubprocVecEnv([make_env(env_lam, i) for i in range(N_PROC)])
+        # env = env_lam()
+        env_eval = VecTransposeImage(
+            DummyVecEnv([lambda: E.Scalable(eval_reward=True, **env_kwargs)])
+        )
 
         learning_starts = 200_000
         policy_steps = 300_000
@@ -56,17 +55,18 @@ def full_test() -> None:
             # "MlpPolicy",
             env,
             # learning_starts=learning_starts,
-            # n_steps=10,
+            # n_steps=0x800,
             # learning_rate=1e-4,
             policy_kwargs=policy_kwargs,
             verbose=0,
         )
         model.learn(
-            total_timesteps=int(policy_steps + learning_starts),
+            # total_timesteps=int(policy_steps + learning_starts),
+            total_timesteps=int(10_000_000),
             # log_interval=5_000,
             callback=[
                 callbacks.EvalCallback(
-                    eval_env=env_eval, n_eval_episodes=1000, eval_freq=1_000
+                    eval_env=env_eval, n_eval_episodes=100, eval_freq=5_000
                 )
             ],
         )
@@ -75,9 +75,10 @@ def full_test() -> None:
         mean_reward, std_reward = evaluate_policy(model, env_eval, n_eval_episodes=1000)
         print(mean_reward, std_reward)
 
-        del model
-        exit()
+        # eval_model()
 
+
+def eval_model():
     model = alg.load("model-save")
     env = env_lam()
     mean_reward, std_reward = evaluate_policy(model, env, n_eval_episodes=100)
