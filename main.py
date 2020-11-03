@@ -1,5 +1,6 @@
 import sys
 from typing import Any, Tuple, List
+from functools import partial
 
 from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
 from stable_baselines3.common.evaluation import evaluate_policy  # type: ignore
@@ -25,23 +26,24 @@ def make_env(env_constructor, rank, seed=0):
     return _init
 
 
-def full_test():
+def full_test() -> None:
     N_PROC = 1
 
     # alg = DQN
     # alg = A2C
-    # alg = PPO
-    alg = SAC
+    alg = PPO
+    # alg = SAC
+    env_lam = lambda: VecTransposeImage(
+        # DummyVecEnv([lambda: E.Orientationless(grid_size=3)])
+        DummyVecEnv([lambda: E.Scalable(lsize=5, single_step = True)])
+    )
     policy_kwargs = {
         # "features_extractor_class": nn.BasicCnn,
-        "features_extractor_class": nn.SimpleCnn,
+        "features_extractor_class": partial(nn.ScalableCnn, out_size=0x20, ratio=2),
         "net_arch": [0x20] * 2,
     }
     # env_lam = lambda: E.Discrete(grid_size=4)
     # env_lam = lambda: VecTransposeImage(DummyVecEnv([lambda: E.DiscreteAbsolute(grid_size=4)]))
-    env_lam = lambda: VecTransposeImage(
-        DummyVecEnv([lambda: E.Orientationless(grid_size=3)])
-    )
     if len(sys.argv) >= 2 and sys.argv[1] == "train":
         # env = SubprocVecEnv([make_env(env_lam, i) for i in range(N_PROC)])
         env_eval = env_lam()
@@ -263,45 +265,6 @@ def test_2d():
     print(succs / n_episodes)
 
 
-def test_1d() -> None:
-    lsize = 5
-    size = 2 ** lsize
-    cnn_out_size = lsize
-    cnn_ratio = 1
-    percpetion_model = nn.ScalableCnn(1, cnn_out_size, lsize, cnn_ratio, 2)
-    policy_model = nn.Perceptron([cnn_out_size * cnn_ratio, 10, 1])
-    model = torch.nn.Sequential(percpetion_model, policy_model)
-    loss_fn = torch.nn.MSELoss(reduction="mean")
-    lr = 1e-3
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    rng = np.random.default_rng()
-
-    data_len = 100
-    data_y = []
-    data_x = []
-    for _ in range(data_len):
-        loc = rng.integers(0, size)
-        gloc = rng.integers(0, size)
-        while loc != gloc:
-            gloc = rng.integers(0, size)
-        data_x.append(torch.zeros((2, size)))
-        # TODO Figure out correct dtype
-        data_x[-1][0, loc] = 1.0
-        data_x[-1][1, gloc] = 1.0
-        data_y.append(torch.tensor(1.0 if loc < gloc else -1.0))
-    for epoch in range(10):
-        running_loss = 0
-        for i, idx in enumerate(rng.choice(len(data_x), len(data_x))):
-            # y_pred = policy_model(percpetion_model(data_x[idx]))
-            y_pred = model(data_x[idx].unsqueeze(0)).squeeze(1).squeeze(1)
-            loss = loss_fn(data_y[idx].unsqueeze(0), y_pred)
-            running_loss += (loss - running_loss) / (i + 1)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-        print(f"epoch {epoch:03d}  loss: {running_loss:.3f}")
-
-
 if __name__ == "__main__":
-    # test_1d()
-    test_2d()
+    # test_2d()
+    full_test()

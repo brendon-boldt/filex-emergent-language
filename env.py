@@ -102,11 +102,23 @@ def test_disc_abs():
 
 rng = np.random.default_rng()
 
+
 class Scalable(gym.Env):
     def __init__(
-        self, *, lsize: int, obs_lscale: int, action_scale: int, max_steps: int = None
+        self,
+        *,
+        lsize: int,
+        obs_lscale: int = None,
+        action_scale: int = None,
+        max_steps: int = None,
+        single_step=False,
     ):
         super(self.__class__, self).__init__()
+
+        if obs_lscale is None:
+            obs_lscale = lsize
+        if action_scale is None:
+            action_scale = 1
 
         # natural number, >= 0
         self.lsize = lsize
@@ -128,6 +140,9 @@ class Scalable(gym.Env):
         # the largest number of loci the agent can move in one step
         self.action_scale = action_scale
 
+        # If true, use a toy environment with one-step episodes
+        self.single_step = single_step
+
         channels = 2
         obs_shape = (*2 * (self.size,), channels)
         self.observation_space = spaces.Box(
@@ -148,7 +163,7 @@ class Scalable(gym.Env):
             self.size - 1,
         )
 
-    def _get_observation(self) -> StepResult:
+    def _get_observation(self, prev_location: np.ndarray) -> StepResult:
         _observation = np.zeros(self.observation_space.shape)
         T = tuple
         _observation[T(self.location)][0] = 1.0
@@ -158,26 +173,32 @@ class Scalable(gym.Env):
 
         diff = (self.location - self.goal_location) / self.size
         dist = (diff ** 2).sum() ** 0.5
-        reward = 0.0
-        if (self.num_steps > 0 and dist < 1e-3) or self.num_steps > self.max_steps:
-            self.stop = True
-        if self.stop:
-            if dist < 1e-3:
-                reward += 100.0
-            else:
-                reward += 0.0
+        prev_diff = (prev_location - self.goal_location) / self.size
+        prev_dist = (prev_diff ** 2).sum() ** 0.5
+        if self.single_step:
+            reward = 1.0 if dist < prev_dist else -1.0
         else:
-            reward += -0.05
+            reward = 0.0
+            if (self.num_steps > 0 and dist < 1e-3) or self.num_steps > self.max_steps:
+                self.stop = True
+            if self.stop:
+                if dist < 1e-3:
+                    reward += 100.0
+                else:
+                    reward += -10.0
+            else:
+                reward += 1. if dist < prev_dist else -2.
         info: Dict[str, Any] = {}
-        return observation, reward, self.stop, info
+        return observation, reward, self.stop or self.single_step, info
 
     def step(self, action: np.ndarray) -> StepResult:
         if self.stop:
             raise Exception("Cannot take action after the agent has stopped")
         self.num_steps += 1
         # If the max has been reached, force the agent to stop
+        prev_location = self.location.copy()
         self._take_action(action)
-        return self._get_observation()
+        return self._get_observation(prev_location)
 
     def reset(self) -> np.ndarray:
         self.location = rng.integers(0, self.size, (2,))
@@ -186,7 +207,7 @@ class Scalable(gym.Env):
             self.goal_location = rng.integers(0, self.size, (2,))
         self.stop = False
         self.num_steps = 0
-        return self._get_observation()[0]
+        return self._get_observation(self.location)[0]
 
 
 class Env1D(gym.Env):
