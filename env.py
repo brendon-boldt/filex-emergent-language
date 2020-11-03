@@ -100,6 +100,8 @@ def test_disc_abs():
         print(obs.transpose(-1, 0, 1)[:2])
 
 
+rng = np.random.default_rng()
+
 class Scalable(gym.Env):
     def __init__(
         self, *, lsize: int, obs_lscale: int, action_scale: int, max_steps: int = None
@@ -139,6 +141,7 @@ class Scalable(gym.Env):
         self.stop = False
 
     def _take_action(self, action: np.ndarray) -> None:
+        assert action.shape == (2,)
         self.location = np.clip(
             np.round(self.location + action * self.action_scale).astype(np.int32),
             0,
@@ -177,8 +180,10 @@ class Scalable(gym.Env):
         return self._get_observation()
 
     def reset(self) -> np.ndarray:
-        self.location = np.random.default_rng().integers(0, self.size, (2,))
-        self.goal_location = np.random.default_rng().integers(0, self.size, (2,))
+        self.location = rng.integers(0, self.size, (2,))
+        self.goal_location = rng.integers(0, self.size, (2,))
+        while (self.location == self.goal_location).all():
+            self.goal_location = rng.integers(0, self.size, (2,))
         self.stop = False
         self.num_steps = 0
         return self._get_observation()[0]

@@ -1,7 +1,7 @@
-from typing import List
+from typing import List, Any, Callable
 
 import gym  # type: ignore
-from torch import nn  # type: ignore
+from torch import nn
 import torch as th
 from stable_baselines3.common.torch_layers import (  # type: ignore
     BaseFeaturesExtractor,
@@ -36,8 +36,8 @@ class ScalableCnn(nn.Module):
         self.input_lsize = input_lsize
 
         if self.dim == 1:
-            conv = nn.Conv1d
-            pool = nn.AvgPool1d
+            conv: Callable[..., nn.Module] = nn.Conv1d
+            pool: Callable[..., nn.Module] = nn.AvgPool1d
         elif self.dim == 2:
             conv = nn.Conv2d
             pool = nn.AvgPool2d

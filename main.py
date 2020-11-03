@@ -1,5 +1,5 @@
 import sys
-from typing import Any
+from typing import Any, Tuple, List
 
 from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
 from stable_baselines3.common.evaluation import evaluate_policy  # type: ignore
@@ -97,10 +97,10 @@ def full_test():
                 break
 
 
-device = "cuda:0"
+device = "cpu"
 
 
-def make_2d_policy(env) -> Any:
+def make_2d_bc_policy(env) -> Any:
     lr = 5e-4
     n_epochs = 200
     cnn_ratio = 2
@@ -116,18 +116,18 @@ def make_2d_policy(env) -> Any:
     loss_fn = torch.nn.MSELoss(reduction="mean")
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     rng = np.random.default_rng()
-    data_y = []
-    data_x = []
+    _data_y = []
+    _data_x = []
     # TODO Let the environment generate the data.
     for _ in range(data_len):
         loc = rng.integers(0, env.size, 2)
         gloc = rng.integers(0, env.size, 2)
         while (loc == gloc).all():
             gloc = rng.integers(0, env.size, 2)
-        data_x.append(np.zeros((2, env.size, env.size), dtype=np.float32))
+        _data_x.append(np.zeros((2, env.size, env.size), dtype=np.float32))
         # TODO Figure out correct dtype
-        data_x[-1][0, loc[0], loc[1]] = 1.0
-        data_x[-1][1, gloc[0], gloc[1]] = 1.0
+        _data_x[-1][0, loc[0], loc[1]] = 1.0
+        _data_x[-1][1, gloc[0], gloc[1]] = 1.0
         diff = np.array(gloc - loc, dtype=np.float32)
         # y_gold = diff / (diff ** 2).sum() ** 0.5
         # Discretize angle
@@ -135,11 +135,11 @@ def make_2d_policy(env) -> Any:
             (np.round(2 * np.arctan2(*(gloc - loc)) / (np.pi)) + 4) % 4
         )
         y_gold = np.array([np.sin(disc_angle), np.cos(disc_angle)])
-        data_y.append(y_gold)
+        _data_y.append(y_gold)
 
     model.to(device)
-    data_x = torch.FloatTensor(data_x).to(device)
-    data_y = torch.FloatTensor(data_y).to(device)
+    data_x = torch.FloatTensor(_data_x).to(device)
+    data_y = torch.FloatTensor(_data_y).to(device)
 
     for epoch in range(n_epochs):
         running_loss = 0
@@ -165,8 +165,60 @@ def make_2d_policy(env) -> Any:
     return model
 
 
+def make_2d_rs_policy(env) -> Any:
+    lr = 1e-3
+    n_iters = 20_000
+    cnn_ratio = 2
+    # ((2 ** s) * (2 ** s)) ** 2
+    # 0x4000
+    data_len = 2 ** (env.lsize * 4)
+    batch_size = 2 ** 9
+
+    cnn_out_size = env.lsize
+    percpetion_model = nn.ScalableCnn(2, cnn_out_size, env.lsize, cnn_ratio, 2)
+    policy_model = nn.Perceptron([cnn_out_size * cnn_ratio, 0x20, 0x20, 0x20, 2])
+    model = torch.nn.Sequential(percpetion_model, policy_model)
+    loss_fn = torch.nn.MSELoss(reduction="mean")
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    rng = np.random.default_rng()
+
+    model.to(device)
+
+    tick = 400
+    dist = lambda x, y: np.sqrt(((x - y) ** 2).sum())
+    for it in range(n_iters):
+        if it % tick == 0:
+            if it != 0:
+                st = list(zip(*stats))
+                m_reward = np.mean(st[0])
+                m_loss = np.mean(st[1])
+                print(f"{it}  reward: {m_reward:.3f}  loss: {m_loss:.3f}")
+            stats: List[Tuple] = []
+        obs = env.reset()
+        orig_loc = env.location
+        action = model(
+            torch.FloatTensor(obs).permute(2, 0, 1).unsqueeze(0).to(device)
+        ).squeeze()
+        env.step(action.detach().cpu().numpy())
+        new_loc = env.location
+        if dist(new_loc, env.goal_location) < dist(orig_loc, env.goal_location):
+            r = 1.0
+        else:
+            r = -1.0
+        # print(action)
+        # print(dist(new_loc, env.goal_location), dist(orig_loc, env.goal_location), r)
+        loss = -r + (action - action.detach()).mean()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        stats.append((r, loss.detach().cpu().numpy()))
+        # print(f"epoch {epoch:03d}  loss: {running_loss:.3f}")
+
+    return model
+
+
 def test_2d():
-    lsize = 4
+    lsize = 1
     size = 2 ** lsize
     cnn_out_size = lsize
     action_scale = 1
@@ -175,7 +227,8 @@ def test_2d():
     train_model = True
     model_path = "model.pt"
     if train_model:
-        model = make_2d_policy(env)
+        # model = make_2d_bc_policy(env)
+        model = make_2d_rs_policy(env)
         torch.save(model, model_path)
     else:
         model = torch.load(model_path)
