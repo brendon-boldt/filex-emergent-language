@@ -2,3 +2,4 @@ gym==0.17.2
 numpy
 stable-baselines3
 torch
+tensorboard

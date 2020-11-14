@@ -1,19 +1,46 @@
 import sys
 from typing import Any, Tuple, List
-from functools import partial
+import argparse
+from pathlib import Path
 
 from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
 from stable_baselines3.common.evaluation import evaluate_policy  # type: ignore
 from stable_baselines3.dqn import CnnPolicy  # type: ignore
 from stable_baselines3.common import callbacks  # type: ignore
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecTransposeImage, DummyVecEnv  # type: ignore
+from stable_baselines3.common.vec_env import (
+    SubprocVecEnv,
+    VecTransposeImage,
+    DummyVecEnv,
+)  # type: ignore
 from stable_baselines3.common.cmd_util import make_vec_env  # type: ignore
 from stable_baselines3.common.utils import set_random_seed  # type: ignore
-import torch  # type: ignore
+import torch
 import numpy as np  # type: ignore
+from torch.utils.tensorboard import SummaryWriter
 
 import env as E
 import nn
+from callback import LoggingCallback
+
+cfg = argparse.Namespace(
+    run_name=sys.argv[1],
+    device="cuda",
+    n_proc=4,
+    alg=PPO,
+    n_steps=0x80,
+    batch_size=0x100,
+    # learning_rate=1e-4, # default 3-e4
+    learning_rate=3e-4,  # default 3-e4
+    single_step=False,
+    env_lsize=6,
+    action_scale=2 ** 3,
+    fe_out_size=0x40,
+    fe_out_ratio=4,
+    policy_net_arch=[0x40] * 2,
+    eval_episodes=1000,
+    eval_freq=500,
+    total_timesteps=10_000_000,
+)
 
 
 def make_env(env_constructor, rank, seed=0):
@@ -27,46 +54,60 @@ def make_env(env_constructor, rank, seed=0):
 
 
 def full_test() -> None:
-    N_PROC = 4
+    print(cfg)
+    log_dir = Path(f"runs/{cfg.run_name}")
+    if log_dir.exists():
+        raise ValueError()
+    writer = SummaryWriter(log_dir=log_dir)
+    # loggable_hparams = {
+    #     k: v if v in (int, float, bool) else str(v) for k, v in vars(cfg).items()
+    # }
+    # writer.add_hparams(loggable_hparams, {})
 
-    # alg = DQN
-    # alg = A2C
-    alg = PPO
-    # alg = SAC
-    env_kwargs = {"lsize": 5, "single_step": False}
-    env_lam = lambda: VecTransposeImage(
-        DummyVecEnv([lambda: E.Scalable(**env_kwargs)])
-    )
-    policy_kwargs = {
-        "features_extractor_class": partial(nn.ScalableCnn, out_size=0x20, ratio=2),
-        "net_arch": [0x20] * 2,
+    env_kwargs = {
+        "lsize": cfg.env_lsize,
+        "single_step": cfg.single_step,
+        "action_scale": cfg.action_scale,
     }
-    if len(sys.argv) >= 2 and sys.argv[1] == "train":
-        env = SubprocVecEnv([make_env(env_lam, i) for i in range(N_PROC)])
+    env_lam = lambda: VecTransposeImage(DummyVecEnv([lambda: E.Scalable(**env_kwargs)]))
+    policy_kwargs = {
+        "features_extractor_class": nn.ScalableCnn,
+        "features_extractor_kwargs": {
+            "out_size": cfg.fe_out_size,
+            "ratio": cfg.fe_out_ratio,
+        },
+        "net_arch": cfg.policy_net_arch,
+    }
+    # if len(sys.argv) >= 2 and sys.argv[1] == "train":
+    if True:
+        env_lam = lambda: E.Scalable(**env_kwargs)
+        env = SubprocVecEnv([make_env(env_lam, i) for i in range(cfg.n_proc)])
         # env = env_lam()
         env_eval = VecTransposeImage(
             DummyVecEnv([lambda: E.Scalable(eval_reward=True, **env_kwargs)])
         )
 
-        learning_starts = 200_000
-        policy_steps = 300_000
-        model = alg(
+        model = cfg.alg(
             "CnnPolicy",
-            # "MlpPolicy",
             env,
-            # learning_starts=learning_starts,
-            # n_steps=0x800,
-            # learning_rate=1e-4,
+            n_steps=cfg.n_steps,
+            batch_size=cfg.batch_size,
             policy_kwargs=policy_kwargs,
             verbose=0,
+            learning_rate=cfg.learning_rate,
+            device=cfg.device,
         )
         model.learn(
             # total_timesteps=int(policy_steps + learning_starts),
-            total_timesteps=int(10_000_000),
+            total_timesteps=cfg.total_timesteps,
             # log_interval=5_000,
             callback=[
-                callbacks.EvalCallback(
-                    eval_env=env_eval, n_eval_episodes=100, eval_freq=5_000
+                LoggingCallback(
+                    eval_env=env_eval,
+                    n_eval_episodes=cfg.eval_episodes,
+                    eval_freq=cfg.eval_freq,
+                    writer=writer,
+                    verbose=0,
                 )
             ],
         )
@@ -98,9 +139,6 @@ def eval_model():
                 print(env.goal_location)
                 print(total_reward)
                 break
-
-
-device = "cpu"
 
 
 def make_2d_bc_policy(env) -> Any:
@@ -140,9 +178,9 @@ def make_2d_bc_policy(env) -> Any:
         y_gold = np.array([np.sin(disc_angle), np.cos(disc_angle)])
         _data_y.append(y_gold)
 
-    model.to(device)
-    data_x = torch.FloatTensor(_data_x).to(device)
-    data_y = torch.FloatTensor(_data_y).to(device)
+    model.to(cfg.device)
+    data_x = torch.FloatTensor(_data_x).to(cfg.device)
+    data_y = torch.FloatTensor(_data_y).to(cfg.device)
 
     for epoch in range(n_epochs):
         running_loss = 0
