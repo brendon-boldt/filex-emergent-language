@@ -43,7 +43,7 @@ class LoggingCallback(EventCallback):
         deterministic: bool = True,
         render: bool = False,
         verbose: int = 1,
-    ):
+    ) -> None:
         super(self.__class__, self).__init__(callback_on_new_best, verbose=verbose)
         self.n_eval_episodes = n_eval_episodes
         self.eval_freq = eval_freq
@@ -130,17 +130,17 @@ class LoggingCallback(EventCallback):
             self.writer.add_scalar("mean_reward", float(mean_reward), self.num_timesteps)
             self.writer.add_scalar("mean_ep_length", mean_ep_length, self.num_timesteps)
 
-            # if mean_reward > self.best_mean_reward:
-            #     if self.verbose > 0:
-            #         print("New best mean reward!")
-            #     if self.best_model_save_path is not None and self.model:
-            #         self.model.save(
-            #             os.path.join(self.best_model_save_path, "best_model")
-            #         )
-            #     self.best_mean_reward = mean_reward
-            #     # Trigger callback if needed
-            #     if self.callback is not None:
-            #         return self._on_event()
+            if mean_reward > self.best_mean_reward:
+                if self.verbose > 0:
+                    print("New best mean reward!")
+                if self.best_model_save_path is not None and self.model:
+                    self.model.save(
+                        os.path.join(self.best_model_save_path, "best_model")
+                    )
+                self.best_mean_reward = mean_reward
+                # Trigger callback if needed
+                if self.callback is not None:
+                    return self._on_event()
 
         return True
 
