@@ -1,4 +1,4 @@
-from typing import List, Any, Callable
+from typing import List, Any, Callable, Tuple, Optional, Dict, Union, Type
 
 import gym  # type: ignore
 from torch import nn
@@ -57,12 +57,21 @@ class ScalableCnn(nn.Module):
             if i != 0:
                 layers.append(nn.Tanh())
             chans_in = chans_out
-        self.model = nn.Sequential(*layers)
+        self.linears = nn.Sequential(
+            nn.Tanh(),
+            nn.Linear(chans_out, 0x40),
+            nn.ReLU(),
+            nn.Linear(0x40, features_dim),
+        )
+        self.cnn = nn.Sequential(*layers)
 
     def forward(self, x) -> th.Tensor:
         # x = x.view((1, 1, -1))
         # x.unsqueeze_(1)
-        x = self.model(x)
+        x = self.cnn(x)
         x = x.flatten(1)
+        x = self.linears(x)
+        # x = nn.functional.gumbel_softmax(x, tau=1)
+        # x = nn.functional.softmax(x, dim=-1)
         # return x.transpose(2, 1)
         return x

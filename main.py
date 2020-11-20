@@ -25,11 +25,11 @@ from callback import LoggingCallback
 
 _cfg = argparse.Namespace(
     device="cuda",
-    n_proc=4,
+    n_proc=4,  # default: 4
     alg=PPO,
     n_steps=0x80,
     batch_size=0x100,
-    learning_rate=3e-4,  # default 3-e4
+    learning_rate=3e-4,  # default: 3-e4
     single_step=False,
     env_lsize=2,
     action_scale=2 ** 0,
@@ -106,6 +106,7 @@ def full_test(
         n_eval_episodes=cfg.eval_episodes,
         eval_freq=cfg.eval_freq,
         callback_on_new_best=stopper_callback,
+        best_model_save_path=str(log_dir / "best.pt"),
         writer=writer,
         verbose=0,
     )
@@ -147,8 +148,9 @@ def main() -> None:
     if exper_dir.exists():
         raise ValueError()
     for action_lscale in (0, 1, 2, 3):
-        for env_lsize in (2, 3, 4):
-            if action_lscale >= env_lsize:
+        for env_lsize in (2, 3, 4, 5, 6):
+            diff = env_lsize - action_lscale
+            if diff <= 0 or diff > 3:
                 continue
             cfg = Namespace(**vars(_cfg))
             cfg.action_scale = 2 ** action_lscale
