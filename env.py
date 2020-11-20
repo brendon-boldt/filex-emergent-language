@@ -8,6 +8,8 @@ StepResult = Tuple[Any, float, bool, Dict]
 
 rng = np.random.default_rng()
 
+def norm(x):
+    return np.sqrt((x**2).sum(-1))
 
 class Scalable(gym.Env):
     def __init__(
@@ -68,8 +70,11 @@ class Scalable(gym.Env):
 
     def _take_action(self, action: np.ndarray) -> None:
         assert action.shape == (2,)
+        act_norm = norm(action)
+        if act_norm > 1:
+            action /= act_norm
         self.location = np.clip(
-            np.round(self.location + action * self.action_scale).astype(np.int32),
+            np.trunc(self.location + action * self.action_scale).astype(np.int32),
             0,
             self.size - 1,
         )

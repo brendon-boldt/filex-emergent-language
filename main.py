@@ -80,7 +80,10 @@ def full_test(
         "net_arch": cfg.policy_net_arch,
     }
     env_lam = lambda: E.Scalable(**env_kwargs)
-    env = SubprocVecEnv([make_env(env_lam, i) for i in range(cfg.n_proc)])
+    if cfg.n_proc > 1:
+        env = SubprocVecEnv([make_env(env_lam, i) for i in range(cfg.n_proc)])
+    else:
+        env = env_lam()
     env_eval = VecTransposeImage(
         DummyVecEnv([lambda: E.Scalable(eval_reward=True, **env_kwargs)])
     )
@@ -117,7 +120,7 @@ def full_test(
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("run_name", type=str)
-    parser.add_argument("--num_trials", type=int, default=10)
+    parser.add_argument("--num_trials", type=int, default=1)
     return parser.parse_args()
 
 
