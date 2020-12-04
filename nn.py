@@ -12,57 +12,6 @@ from stable_baselines3.common.torch_layers import (  # type: ignore
 from stable_baselines3.common.policies import ActorCriticPolicy
 
 
-class Perceptron(nn.Module):
-    # def __init__(self, sizes: List[int]) -> None:
-    def __init__(
-        self, feature_dim: int, last_layer_dim_pi: int, last_layer_dim_vf: int
-    ) -> None:
-        super(self.__class__, self).__init__()
-        self.sizes = [0x40]
-        # self.sizes = sizes
-        sizes = [feature_dim] + self.sizes
-
-        layers: List[nn.Module] = []
-        for i in range(len(sizes) - 1):
-            layers.append(nn.Linear(sizes[i], sizes[i + 1]))
-            if i != len(sizes) - 2:
-                layers.append(nn.ReLU())
-        self.model = nn.Sequential(*layers)
-        self.last_layer_pi = nn.Linear(sizes[-1], last_layer_dim_pi)
-        self.last_layer_vf = nn.Linear(sizes[-1], last_layer_dim_vf)
-
-    def forward(self, x) -> Tuple[torch.Tensor, torch.Tensor]:
-        x = self.model(x)
-        return self.last_layer_pi(x), self.last_layer_vf(x)
-        # return torch.tanh(x)
-
-
-class CustomActorCriticPolicy(ActorCriticPolicy):
-    def __init__(
-        self,
-        observation_space: gym.spaces.Space,
-        action_space: gym.spaces.Space,
-        lr_schedule: Callable[[float], float],
-        net_arch: Optional[List[Union[int, Dict[str, List[int]]]]] = None,
-        activation_fn: Type[nn.Module] = nn.Tanh,
-        **kwargs,
-    ):
-        super(CustomActorCriticPolicy, self).__init__(
-            observation_space,
-            action_space,
-            lr_schedule,
-            net_arch=net_arch,
-            activation_fn=activation_fn,
-            **kwargs,
-        )
-        # Disable orthogonal initialization
-        self.ortho_init = False
-
-    def _build_mlp_extractor(self) -> None:
-        # I don't know if ignoring the type here is okay
-        self.mlp_extractor = Perceptron(self.features_dim)  # type: ignore
-
-
 class BottleneckPolicy(nn.Module):
     def __init__(
         self,
@@ -87,8 +36,7 @@ class BottleneckPolicy(nn.Module):
 
         self.temp = temp
         if bottleneck == "none":
-            # self.bottleneck: Callable = nn.Identity()
-            self.bottleneck: Callable = nn.functional.sigmoid
+            self.bottleneck: Callable = torch.sigmoid
         elif bottleneck in ("sm", "softmax"):
             self.bottleneck = lambda x: nn.functional.softmax(x / self.temp, dim=-1)
         elif bottleneck in ("gsm", "gumbel-softmax"):
@@ -120,7 +68,6 @@ class BottleneckPolicy(nn.Module):
 
 
 class ScalableCnn(nn.Module):
-    # def __init__(self, dim, out_size, input_lsize, ratio, channels) -> None:
     def __init__(
         self,
         obs_space: gym.spaces.Box,
@@ -133,7 +80,6 @@ class ScalableCnn(nn.Module):
     ):
         super(self.__class__, self).__init__()
         self.obs_space = obs_space
-        # Maybe we'll get to 3 one day
         self.out_size = out_size
         # (floor . log_2) the clever way
         self.input_lsize = sum(
@@ -142,7 +88,6 @@ class ScalableCnn(nn.Module):
 
         conv = nn.Conv2d
         pool = nn.AvgPool2d
-        # pool = nn.MaxPool2d
 
         assert self.out_size >= self.input_lsize
         layers: List[nn.Module] = []
@@ -159,7 +104,6 @@ class ScalableCnn(nn.Module):
 
         # Haha
         self.bottle_net = BottleneckPolicy(
-            # We only need it for the shape
             gym.spaces.Box(low=-np.inf, high=np.inf, shape=(chans_out,)),
             bottleneck,
             pre_arch,

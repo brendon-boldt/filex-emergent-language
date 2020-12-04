@@ -74,20 +74,11 @@ class Scalable(gym.Env):
 
     def _take_action(self, action: np.ndarray) -> None:
         assert action.shape == (2,)
-        if True:
-            # Correct way
-            action = np.round(action * self.action_scale)
-            act_norm = norm(action)
-            if act_norm > self.action_scale:
-                action /= act_norm
-        else:
-            act_norm = norm(action)
-            if act_norm > 1:
-                action /= act_norm
-            action = np.round(action * self.action_scale)
+        action = np.round(action * self.action_scale)
+        act_norm = norm(action)
+        if act_norm > self.action_scale:
+            action /= act_norm
         self.location = np.clip(
-            # np.trunc(self.location + action * self.action_scale).astype(np.int32),
-            # np.round(self.location + action * self.action_scale).astype(np.int32),
             self.location + action.astype(np.int32),
             0,
             self.size - 1,
@@ -96,7 +87,6 @@ class Scalable(gym.Env):
     def _is_at_goal(self) -> bool:
         diff = (self.location - self.goal_location) / self.size
         dist = (diff ** 2).sum() ** 0.5
-        # return dist < 1e-3
         return dist < (self.action_scale / self.size)
 
     def _get_observation(self, prev_location: np.ndarray) -> StepResult:
@@ -105,6 +95,7 @@ class Scalable(gym.Env):
             _observation = np.zeros(self.observation_space.shape)
             T = tuple
             _observation[T(self.location)][0] = 1.0
+            # Distinguish passable locations from 0 padding
             # _observation[..., 1] = 0.1
             _observation[T(self.goal_location)][1] = 1.0
             observation = (_observation * 255).astype(np.uint8)
@@ -133,10 +124,6 @@ class Scalable(gym.Env):
                     reward += 1.0
                 else:
                     reward += 0
-                    # reward += -10.0
-            else:
-                pass
-                # reward += 1. if dist < prev_dist else -2.
         return observation, reward, self.stop, info
 
     def step(self, action: np.ndarray) -> StepResult:

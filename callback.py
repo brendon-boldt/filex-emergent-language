@@ -30,8 +30,6 @@ class LoggingCallback(EventCallback):
     :param eval_freq: Evaluate the agent every eval_freq call of the callback.
     :param log_path: Path to a folder where the evaluations (``evaluations.npz``)
         will be saved. It will be updated at each evaluation.
-    :param best_model_save_path: Path to a folder where the best model
-        according to performance on the eval env will be saved.
     :param deterministic: Whether the evaluation should
         use a stochastic or deterministic actions.
     :param deterministic: Whether to render or not the environment during evaluation
@@ -48,7 +46,6 @@ class LoggingCallback(EventCallback):
         n_eval_episodes: int = 5,
         eval_freq: int = 10000,
         log_path: str = None,
-        # best_model_save_path: str = None,
         deterministic: bool = True,
         render: bool = False,
         verbose: int = 1,
@@ -74,12 +71,7 @@ class LoggingCallback(EventCallback):
             ), "You must pass only one environment for evaluation"
 
         self.eval_env = eval_env
-        # self.best_model_save_path = best_model_save_path
         self.best_model_save_path = self.writer.log_dir / "best.zip"
-        # Logs will be written in ``evaluations.npz``
-        # if log_path is not None:
-        #     log_path = os.path.join(log_path, "evaluations")
-        # self.log_path = log_path
         self.log_path = self.writer.log_dir
         self.evaluations_results: List[List[np.ndarray]] = []
         self.evaluations_timesteps: List[int] = []
@@ -142,9 +134,6 @@ class LoggingCallback(EventCallback):
                     f"episode_reward={mean_reward:.2f} +/- {std_reward:.2f}"
                 )
                 print(f"Episode length: {mean_ep_length:.2f} +/- {std_ep_length:.2f}")
-            # Add to current Logger
-            # self.logger.record("eval/mean_reward", float(mean_reward))
-            # self.logger.record("eval/mean_ep_length", mean_ep_length)
             self.writer.add_scalar(
                 "mean_reward", float(mean_reward), self.num_timesteps
             )
@@ -166,12 +155,6 @@ class LoggingCallback(EventCallback):
                     )
                 outps = np.array(_outps).squeeze(1)
                 entropies = util.calc_entropies(outps)
-                # ent_outps = ent(outps)
-                # entropy_argmax = ent(
-                #     np.eye(outps.shape[-1])[outps.argmax(-1)].mean(0)
-                # ).sum(0)
-                # entropy_frac = ent(outps.mean(0)).sum(0)
-                # entropy_indiv = ent_outps.sum(-1).mean(0)
                 self.writer.add_scalar(
                     "entropy/argmax", entropies["argmax"], self.num_timesteps
                 )
@@ -203,5 +186,7 @@ class LoggingCallback(EventCallback):
 
         :param locals_: the local variables during rollout collection
         """
+        # Causes a mypy error
         # if self.callback:
         #     self.callback.update_locals(locals_)
+        pass

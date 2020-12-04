@@ -99,9 +99,7 @@ def make_model(cfg: Namespace) -> Any:
             DummyVecEnv([lambda: E.Scalable(**env_kwargs)])
         )
     else:
-        # env_lam = lambda: DummyVecEnv([lambda: E.Scalable(**env_kwargs)])
         env_lam = lambda: E.Scalable(**env_kwargs)
-
     if cfg.n_proc > 1:
         env = SubprocVecEnv([make_env(env_lam, i) for i in range(cfg.n_proc)])
     else:
@@ -120,7 +118,7 @@ def make_model(cfg: Namespace) -> Any:
     return model
 
 
-def full_test(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
+def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     log_dir = base_dir / f"run-{idx}"
     writer = SummaryWriter(log_dir=log_dir)
     # loggable_hparams = {
@@ -131,7 +129,6 @@ def full_test(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         text_fo.write(str(cfg))
     with (log_dir / "config.pkl").open("wb") as binary_fo:
         pkl.dump(cfg, binary_fo)
-
     env_kwargs = make_env_kwargs(cfg)
     if cfg.pixel_space:
         env_eval: Any = VecTransposeImage(
@@ -139,16 +136,10 @@ def full_test(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         )
     else:
         env_eval = DummyVecEnv([lambda: E.Scalable(is_eval=True, **env_kwargs)])
-        # env_eval = lambda: E.Scalable(is_eval=True, **env_kwargs)
-
-    stopper_callback = callbacks.StopTrainingOnRewardThreshold(
-        reward_threshold=cfg.reward_threshold, verbose=0
-    )
     logging_callback = LoggingCallback(
         eval_env=env_eval,
         n_eval_episodes=cfg.eval_episodes,
         eval_freq=cfg.eval_freq,
-        # callback_on_new_best=stopper_callback,
         writer=writer,
         verbose=0,
         entropy_samples=cfg.entropy_samples,
@@ -158,8 +149,6 @@ def full_test(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         total_timesteps=cfg.total_timesteps,
         callback=[logging_callback],
     )
-    # success = logging_callback.best_mean_reward > cfg.reward_threshold
-    # return success, logging_callback.best_mean_reward, model.num_timesteps
 
 
 def collect_metrics(path: Path) -> Any:
@@ -196,15 +185,25 @@ def run_trials(
     name = "_".join(str(getattr(cfg, prop)) for prop in name_props)
     print(name)
     log_dir = base_dir / name
-    if log_dir.exists():
-        pass
-    # results = []
     for i in range(num_trials):
-        full_test(log_dir, cfg, i)
-        # results.append(full_test(log_dir, cfg, i))
-        # with (log_dir / "results.csv").open("a") as fo:
-        #     fo.write(",".join(str(x) for x in results[-1]))
-        #     fo.write("\n")
+        print(f"\t{i + 1} / {num_trials}")
+        do_run(log_dir, cfg, i)
+
+
+def run_experiment(name: str, num_trials: int) -> None:
+    exper_dir = Path("runs") / name
+    print(name)
+    print()
+    if exper_dir.exists():
+        raise ValueError()
+
+    for env_lsize in range(4, 8):
+        for bn in "sm", "gsm":
+            cfg = Namespace(**vars(_cfg))
+            cfg.action_scale = 2 ** (env_lsize - 4)
+            cfg.env_lsize = env_lsize
+            cfg.bottleneck = bn
+            run_trials(exper_dir, cfg, ["bottleneck", "env_lsize"], num_trials)
 
 
 def get_args() -> argparse.Namespace:
@@ -221,18 +220,7 @@ def main() -> None:
     if args.command == "test":
         collect_metrics(Path(args.target))
     elif args.command == "run":
-        exper_dir = Path("runs") / args.target
-        print(args.target)
-        if exper_dir.exists():
-            raise ValueError()
-
-        for env_lsize in range(4, 8):
-            for bn in "sm", "gsm":
-                cfg = Namespace(**vars(_cfg))
-                cfg.action_scale = 2 ** (env_lsize - 4)
-                cfg.env_lsize = env_lsize
-                cfg.bottleneck = bn
-                run_trials(exper_dir, cfg, ["bottleneck", "env_lsize"], args.num_trials)
+        run_experiment(args.target, args.num_trials)
 
 
 if __name__ == "__main__":
