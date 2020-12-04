@@ -2,14 +2,22 @@ from typing import Union
 import os
 import warnings
 
-import gym # type: ignore
-import numpy as np # type: ignore
+import torch
+import gym  # type: ignore
+import numpy as np  # type: ignore
 from typing import Any, Callable, Dict, List, Optional, Union
 from stable_baselines3.common.callbacks import EventCallback, BaseCallback
 from stable_baselines3.common import base_class
 from stable_baselines3.common.evaluation import evaluate_policy
-from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv, sync_envs_normalization
+from stable_baselines3.common.vec_env import (
+    DummyVecEnv,
+    VecEnv,
+    sync_envs_normalization,
+)
 from torch.utils.tensorboard import SummaryWriter
+
+import util
+
 
 class LoggingCallback(EventCallback):
     """
@@ -35,14 +43,16 @@ class LoggingCallback(EventCallback):
         self,
         eval_env: Union[gym.Env, VecEnv],
         writer: SummaryWriter,
+        rolling_mean_samples=10,
         callback_on_new_best: Optional[BaseCallback] = None,
         n_eval_episodes: int = 5,
         eval_freq: int = 10000,
         log_path: str = None,
-        best_model_save_path: str = None,
+        # best_model_save_path: str = None,
         deterministic: bool = True,
         render: bool = False,
         verbose: int = 1,
+        entropy_samples: int = 0,
     ) -> None:
         super(self.__class__, self).__init__(callback_on_new_best, verbose=verbose)
         self.n_eval_episodes = n_eval_episodes
@@ -52,6 +62,7 @@ class LoggingCallback(EventCallback):
         self.deterministic = deterministic
         self.render = render
         self.writer = writer
+        self.entropy_samples = entropy_samples
 
         # Convert to VecEnv for consistency
         if not isinstance(eval_env, VecEnv):
@@ -63,11 +74,13 @@ class LoggingCallback(EventCallback):
             ), "You must pass only one environment for evaluation"
 
         self.eval_env = eval_env
-        self.best_model_save_path = best_model_save_path
+        # self.best_model_save_path = best_model_save_path
+        self.best_model_save_path = self.writer.log_dir / "best.zip"
         # Logs will be written in ``evaluations.npz``
-        if log_path is not None:
-            log_path = os.path.join(log_path, "evaluations")
-        self.log_path = log_path
+        # if log_path is not None:
+        #     log_path = os.path.join(log_path, "evaluations")
+        # self.log_path = log_path
+        self.log_path = self.writer.log_dir
         self.evaluations_results: List[List[np.ndarray]] = []
         self.evaluations_timesteps: List[int] = []
         self.evaluations_length: List[List[int]] = []
@@ -81,8 +94,8 @@ class LoggingCallback(EventCallback):
             )
 
         # Create folders if needed
-        if self.best_model_save_path is not None:
-            os.makedirs(self.best_model_save_path, exist_ok=True)
+        # if self.best_model_save_path is not None:
+        #     os.makedirs(self.best_model_save_path, exist_ok=True)
         if self.log_path is not None:
             os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
 
@@ -106,7 +119,7 @@ class LoggingCallback(EventCallback):
                 self.evaluations_results.append(episode_rewards)
                 self.evaluations_length.append(episode_lengths)
                 np.savez(
-                    self.log_path,
+                    self.log_path / "data",
                     timesteps=self.evaluations_timesteps,
                     results=self.evaluations_results,
                     ep_lengths=self.evaluations_length,
@@ -117,6 +130,11 @@ class LoggingCallback(EventCallback):
                 episode_lengths
             )
             self.last_mean_reward = mean_reward
+            best_criterion = (
+                -np.mean(self.evaluations_length[-10:])
+                if len(self.evaluations_length)
+                else -np.inf
+            )
 
             if self.verbose > 0:
                 print(
@@ -127,17 +145,52 @@ class LoggingCallback(EventCallback):
             # Add to current Logger
             # self.logger.record("eval/mean_reward", float(mean_reward))
             # self.logger.record("eval/mean_ep_length", mean_ep_length)
-            self.writer.add_scalar("mean_reward", float(mean_reward), self.num_timesteps)
+            self.writer.add_scalar(
+                "mean_reward", float(mean_reward), self.num_timesteps
+            )
             self.writer.add_scalar("mean_ep_length", mean_ep_length, self.num_timesteps)
+            self.writer.add_scalar("rate", self.num_timesteps, self.num_timesteps)
 
-            if mean_reward > self.best_mean_reward:
+            if self.entropy_samples > 0 and self.model and self.model.policy:
+                # TODO Should I be running this across episodes?
+                _outps = []
+                for _ in range(self.entropy_samples):
+                    obs = torch.FloatTensor(self.eval_env.reset()).to(
+                        self.model.policy.device
+                    )
+                    _outps.append(
+                        self.model.policy.features_extractor.forward_bottleneck(obs)
+                        .detach()
+                        .cpu()
+                        .numpy()
+                    )
+                outps = np.array(_outps).squeeze(1)
+                entropies = util.calc_entropies(outps)
+                # ent_outps = ent(outps)
+                # entropy_argmax = ent(
+                #     np.eye(outps.shape[-1])[outps.argmax(-1)].mean(0)
+                # ).sum(0)
+                # entropy_frac = ent(outps.mean(0)).sum(0)
+                # entropy_indiv = ent_outps.sum(-1).mean(0)
+                self.writer.add_scalar(
+                    "entropy/argmax", entropies["argmax"], self.num_timesteps
+                )
+                self.writer.add_scalar(
+                    "entropy/frac", entropies["fractional"], self.num_timesteps
+                )
+                self.writer.add_scalar(
+                    "entropy/indiv", entropies["individual"], self.num_timesteps
+                )
+
+            if best_criterion > self.best_mean_reward:
                 if self.verbose > 0:
                     print("New best mean reward!")
                 if self.best_model_save_path is not None and self.model:
                     self.model.save(
-                        os.path.join(self.best_model_save_path, "best_model")
+                        self.best_model_save_path
+                        # os.path.join(self.best_model_save_path, "best_model")
                     )
-                self.best_mean_reward = mean_reward
+                self.best_mean_reward = best_criterion
                 # Trigger callback if needed
                 if self.callback is not None:
                     return self._on_event()
@@ -150,5 +203,5 @@ class LoggingCallback(EventCallback):
 
         :param locals_: the local variables during rollout collection
         """
-        if self.callback:
-            self.callback.update_locals(locals_)
+        # if self.callback:
+        #     self.callback.update_locals(locals_)
