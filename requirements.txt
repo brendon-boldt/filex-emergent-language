@@ -3,3 +3,6 @@ numpy
 stable-baselines3
 torch
 tensorboard
+joblib
+tqdm
+pandas

@@ -71,7 +71,6 @@ class LoggingCallback(EventCallback):
             ), "You must pass only one environment for evaluation"
 
         self.eval_env = eval_env
-        self.best_model_save_path = self.writer.log_dir / "best.zip"
         self.log_path = self.writer.log_dir
         self.evaluations_results: List[List[np.ndarray]] = []
         self.evaluations_timesteps: List[int] = []
@@ -85,14 +84,10 @@ class LoggingCallback(EventCallback):
                 f"{self.training_env} != {self.eval_env}"
             )
 
-        # Create folders if needed
-        # if self.best_model_save_path is not None:
-        #     os.makedirs(self.best_model_save_path, exist_ok=True)
         if self.log_path is not None:
             os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
 
     def _on_step(self) -> bool:
-
         if self.eval_freq > 0 and self.n_calls % self.eval_freq == 0:
             # Sync training and eval env if there is VecNormalize
             sync_envs_normalization(self.training_env, self.eval_env)
@@ -168,11 +163,14 @@ class LoggingCallback(EventCallback):
             if best_criterion > self.best_mean_reward:
                 if self.verbose > 0:
                     print("New best mean reward!")
-                if self.best_model_save_path is not None and self.model:
-                    self.model.save(
-                        self.best_model_save_path
-                        # os.path.join(self.best_model_save_path, "best_model")
-                    )
+                assert self.model
+                assert self.model.policy
+                self.model.save(
+                    self.log_path
+                    / "best.zip"
+                    # os.path.join(self.best_model_save_path, "best_model")
+                )
+                torch.save(self.model.policy.state_dict(), self.log_path / "best.pt")
                 self.best_mean_reward = best_criterion
                 # Trigger callback if needed
                 if self.callback is not None:
