@@ -19,10 +19,18 @@ class BottleneckPolicy(nn.Module):
         bottleneck: str,
         pre_arch: List[int],
         post_arch: List[int],
-        temp: float = 1.0,
+        temp: float,
+        act: str,
         **kwargs,
     ) -> None:
         super(self.__class__, self).__init__()
+
+        if act == 'tanh':
+            activation: nn.Module = nn.Tanh()
+        elif act == 'relu':
+            activation = nn.ReLU()
+        else:
+            raise ValueError(f'Activation "{act}" not recognized.')
 
         # We need to make a copy of this bebcause stable baselines reuses references
         pre_arch = [x for x in pre_arch]
@@ -30,7 +38,7 @@ class BottleneckPolicy(nn.Module):
         pre_layers: List[nn.Module] = []
         for i in range(len(pre_arch) - 1):
             if i != 0:
-                pre_layers.append(nn.Tanh())
+                pre_layers.append(activation)
             pre_layers.append(nn.Linear(pre_arch[i], pre_arch[i + 1]))
         self.pre_net = nn.Sequential(*pre_layers)
 
@@ -49,7 +57,7 @@ class BottleneckPolicy(nn.Module):
         post_layers: List[nn.Module] = []
         for i in range(len(post_arch) - 1):
             if i != 0:
-                post_layers.append(nn.Tanh())
+                post_layers.append(activation)
             post_layers.append(nn.Linear(post_arch[i], post_arch[i + 1]))
         self.post_net = nn.Sequential(*post_layers)
 

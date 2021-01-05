@@ -29,28 +29,34 @@ from callback import LoggingCallback
 import util
 
 _cfg = argparse.Namespace(
-    device="cpu",
-    n_proc_alg=1,  # default: 4
-    alg=PPO,
-    n_steps=0x400,  # Was 0x80
-    batch_size=0x100,  # Was 0x100
-    learning_rate=3e-4,  # default: 3-e4
-    single_step=False,
-    env_lsize=6,
-    action_scale=2 ** 2,
-    fe_out_size=0x10,
-    fe_out_ratio=4,
+    env_lsize=7,
+    action_scale=2 ** 3,
+    discrete_action=False,
     bottleneck="gsm",
+    bottleneck_temperature=1.0,
+    reward_structure="proximity",  # constant, none, proximity, constant-only
     policy_net_arch=[0x40] * 0,  # default: [0x40] * 2,
-    eval_episodes=500,
+    pre_arch=[0x10, 0x10],
+    post_arch=[0x10],
+    policy_activation="tanh",
+    action_noise=0.0,
+    obs_type="vector",  # vector, direction
     entropy_samples=400,
     eval_freq=20000,
     total_timesteps=5_000_000,
     reward_threshold=0.95,
     max_step_scale=4.5,  # default: 2.5
+    eval_episodes=500,
+    fe_out_size=0x10,
+    fe_out_ratio=4,
     pixel_space=False,
-    pre_arch=[0x10, 0x10],
-    post_arch=[0x10],
+    device="cpu",
+    n_proc_alg=1,
+    alg=PPO,
+    n_steps=0x400,  # Was 0x80
+    batch_size=0x100,  # Was 0x100
+    learning_rate=3e-4,  # default: 3-e4
+    single_step=False,
 )
 
 cfg_test = Namespace(
@@ -70,6 +76,10 @@ def make_env(env_constructor, rank, seed=0):
 
 def make_env_kwargs(cfg: Namespace) -> gym.Env:
     return {
+        "obs_type": cfg.obs_type,
+        "action_noise": cfg.action_noise,
+        "reward_structure": cfg.reward_structure,
+        "discrete_action": cfg.discrete_action,
         "pixel_space": cfg.pixel_space,
         "lsize": cfg.env_lsize,
         "single_step": cfg.single_step,
@@ -89,6 +99,8 @@ def make_policy_kwargs(cfg: Namespace) -> gym.Env:
             "bottleneck": cfg.bottleneck,
             "pre_arch": cfg.pre_arch,
             "post_arch": cfg.post_arch,
+            "temp": cfg.bottleneck_temperature,
+            "act": cfg.policy_activation,
         },
         "net_arch": cfg.policy_net_arch,
     }
@@ -167,10 +179,14 @@ def run_experiment(name: str, num_trials: int, n_jobs: int) -> None:
         raise ValueError()
 
     jobs: List[Tuple] = []
-    for env_lsize in range(4, 8):
+    for els in range(4, 8):
+        # for bn_size in (3, 4, 6, 8, 32, 64, 128, 1024):
         cfg = Namespace(**vars(_cfg))
-        cfg.action_scale = 2 ** (env_lsize - 4)
-        cfg.env_lsize = env_lsize
+        # cfg.pre_arch = list(cfg.pre_arch)
+        # cfg.pre_arch[-1] = bn_size
+        cfg.obs_type = "direction"
+        cfg.env_lsize = els
+        cfg.action_scale = 2 ** (els - 4)
         jobs.extend(run_trials(exper_dir, cfg, ["env_lsize"], num_trials))
     if len(jobs) == 1 or n_jobs == 1:
         for j in jobs:
@@ -180,12 +196,24 @@ def run_experiment(name: str, num_trials: int, n_jobs: int) -> None:
 
 
 def patch_old_configs(cfg: Namespace) -> Namespace:
+    if not hasattr(cfg, "obs_type"):
+        cfg.obs_type = "vector"
+    if not hasattr(cfg, "policy_activation"):
+        cfg.policy_activation = "tanh"
+    if not hasattr(cfg, "bottleneck_temperature"):
+        cfg.action_noise = 0.0
+    if not hasattr(cfg, "bottleneck_temperature"):
+        cfg.bottleneck_temperature = 1.0
+    if not hasattr(cfg, "reward_structure"):
+        cfg.reward_structure = "proximity"
     if not hasattr(cfg, "n_proc_alg"):
         cfg.n_proc_alg = 1
+    if not hasattr(cfg, "discrete_action"):
+        cfg.discrete_action = False
     return cfg
 
 
-def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List]:
+def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, bool]:
     obs = env.reset()
     done = False
     steps = 0
@@ -198,15 +226,31 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List]:
         obs_tensor = torch.Tensor(obs)
         with torch.no_grad():
             policy_out = policy(obs_tensor)
-            act = policy_out[0].numpy()
+            if env.discrete_action:
+                act = np.int64(policy_out[0].numpy())
+            else:
+                act = policy_out[0].numpy()
             # act, _ = model.predict(obs, state=None, deterministic=True)
             # act = policy_out[0].numpy()
             # act = policy(obs_tensor)[0].numpy()
             bn = fe.forward_bottleneck(obs_tensor).numpy()
         bns.append(bn)
-        obs, _, done, _ = env.step(act)
+        obs, _, done, info = env.step(act)
         steps += 1
-    return steps, bns
+    return steps, bns, info["at_goal"]
+
+
+def get_one_hot_vectors(policy: Any) -> np.ndarray:
+    _data = []
+    bn_size = next(policy.features_extractor.post_net.modules())[0].in_features
+    for i in range(bn_size):
+        x = torch.zeros(bn_size)
+        x[i] = 1.0
+        with torch.no_grad():
+            x = policy.features_extractor.post_net(x)
+            x = policy.action_net(x)
+        _data.append(x.numpy())
+    return np.array(_data)
 
 
 def collect_metrics(path: Path, discretize) -> pd.DataFrame:
@@ -215,24 +259,27 @@ def collect_metrics(path: Path, discretize) -> pd.DataFrame:
     cfg = patch_old_configs(cfg)
     env = E.Scalable(is_eval=True, **make_env_kwargs(cfg))
     model = make_model(cfg)
-    # env = model.env
-    # model.load(path / "best.zip")
-    # policy = model.policy.cpu()
     policy = model.policy
     policy.load_state_dict(torch.load(path / "best.pt"))
-    # features_extractor = model.policy.features_extractor.cpu()
+    vectors = get_one_hot_vectors(model.policy)
     features_extractor = policy.features_extractor.cpu()
     bottleneck_values = []
     steps_values = []
+    successes = 0
     for ep in range(cfg_test.n_test_episodes):
-        lens, bns = eval_episode(policy, features_extractor, env, discretize)
+        lens, bns, success = eval_episode(policy, features_extractor, env, discretize)
+        successes += success
         steps_values.append(lens)
         bottleneck_values.extend(bns)
-    entropies = util.calc_entropies(np.stack(bottleneck_values))
+    np_bn_values = np.stack(bottleneck_values)
+    entropies = util.get_metrics(np_bn_values)
     contents = {
         "steps": np.mean(steps_values),
+        "success_rate": successes / cfg_test.n_test_episodes,
         **entropies,
         "discretize": discretize,
+        "usages": np_bn_values.mean(0).tolist(),
+        "vectors": vectors.tolist(),
         **vars(cfg),
     }
     return pd.DataFrame({k: [v] for k, v in contents.items()})
@@ -261,6 +308,34 @@ def aggregate_results(path_strs: List[str], out_name: str, n_jobs: int) -> None:
     df.to_csv(out_name, index=False)
 
 
+def optimality_test() -> None:
+    cfg = _cfg
+    env_kwargs = make_env_kwargs(cfg)
+    env = E.Scalable(is_eval=True, **env_kwargs)
+    rng = np.random.default_rng()
+    n_epochs = 1000
+    for n_divs in [3, 4, 5, 6, 7, 8, 12, 16, 32]:
+        stepss = []
+        for _ in range(n_epochs):
+            sep_angle = 2 * np.pi / n_divs
+            base_angle = rng.uniform(sep_angle)
+            angles = np.array([base_angle + i * sep_angle for i in range(n_divs)])
+            vecs = np.array([[np.cos(a), np.sin(a)] for a in angles])
+            obs = env.reset()
+            done = False
+            steps = 0
+            while not done and steps < 100:
+                dists = ((obs - vecs) ** 2).sum(-1)
+                act = vecs[dists.argsort()[0]]
+                obs, _, done, info = env.step(act)
+                steps += 1
+            stepss.append(steps)
+        step_arr = np.array(stepss)
+        mean = step_arr.mean()
+        stderr = step_arr.std() / np.sqrt(n_epochs)
+        print(f"{n_divs:>2d}: {mean:.1f} +- {2*stderr:.2f}")
+
+
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", type=str)
@@ -278,6 +353,8 @@ def main() -> None:
         aggregate_results(args.targets, args.out_name, args.j)
     elif args.command == "run":
         run_experiment(args.targets[0], args.num_trials, args.j)
+    elif args.command == "optimal":
+        optimality_test()
     else:
         raise ValueError(f"Command '{args.command}' not recognized.")
 

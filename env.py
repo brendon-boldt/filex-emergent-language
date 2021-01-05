@@ -1,4 +1,4 @@
-from typing import Tuple, Any, Dict
+from typing import Tuple, Any, Dict, Union
 
 import gym  # type: ignore
 from gym import spaces
@@ -13,10 +13,32 @@ def norm(x):
     return np.sqrt((x ** 2).sum(-1))
 
 
+# Spirals outward
+DISCRETE_ACT_DICT = {
+    0: [0, 0],
+    1: [1, 0],
+    2: [0, 1],
+    3: [-1, 0],
+    4: [0, -1],
+    5: [1, 1],
+    6: [-1, 1],
+    7: [-1, -1],
+    8: [1, -1],
+    9: [2, 0],
+    10: [0, 2],
+    11: [-2, 0],
+    12: [0, -2],
+}
+
+
 class Scalable(gym.Env):
     def __init__(
         self,
         pixel_space: bool,
+        discrete_action: bool,
+        reward_structure: str,
+        action_noise: float,
+        obs_type: str,
         *,
         lsize: int,
         obs_lscale: int = None,
@@ -45,7 +67,19 @@ class Scalable(gym.Env):
         self.obs_dim = int(2 ** obs_lscale)
 
         # what the network outputs
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
+        self.discrete_action = discrete_action
+        if discrete_action:
+            if action_scale == 1:
+                n_act = 5
+            elif action_scale == 1.5:
+                n_act = 9
+            elif action_scale == 2:
+                n_act = 13
+            else:
+                raise ValueError(f"Cannot handle discrete action scale '{action_scale}'")
+            self.action_space = spaces.Discrete(n_act)
+        else:
+            self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
 
         # the largest number of loci the agent can move in one step
         self.action_scale = action_scale
@@ -68,18 +102,35 @@ class Scalable(gym.Env):
         # TODO Should this be affected by action scale?
         self.max_steps = int((self.size / self.action_scale) * max_step_scale)
 
+        assert reward_structure in ("proximity", "none", "constant", "constant-only")
+        self.reward_structure = reward_structure
+
+        assert obs_type in ("vector", "direction")
+        self.obs_type = obs_type
+
+        self.action_noise = action_noise
+
         # For type purposes
         self.num_steps = 0
         self.stop = False
 
-    def _take_action(self, action: np.ndarray) -> None:
-        assert action.shape == (2,)
-        action = np.round(action * self.action_scale)
-        act_norm = norm(action)
-        if act_norm > self.action_scale:
-            action /= act_norm
+
+    def _take_action(self, action: Union[np.int64, np.ndarray]) -> None:
+        if self.discrete_action:
+            assert type(action) == np.int64
+            final_action = np.array(DISCRETE_ACT_DICT[action])
+        else:
+            assert type(action) == np.ndarray
+            assert action.shape == (2,)  # type: ignore
+            if not self.is_eval:
+                action += rng.normal(0, self.action_noise, 2)
+            action = np.round(action * self.action_scale)
+            act_norm = norm(action)
+            if act_norm > self.action_scale:
+                action *= self.action_scale / act_norm 
+            final_action = action.astype(np.int32)
         self.location = np.clip(
-            self.location + action.astype(np.int32),
+            self.location + final_action,
             0,
             self.size - 1,
         )
@@ -101,6 +152,8 @@ class Scalable(gym.Env):
             observation = (_observation * 255).astype(np.uint8)
         else:
             observation = (self.goal_location - self.location) / self.size
+            if self.obs_type == 'direction':
+                observation /= max(norm(observation), 1e-5)
 
         diff = (self.location - self.goal_location) / self.size
         dist = (diff ** 2).sum() ** 0.5
@@ -118,12 +171,18 @@ class Scalable(gym.Env):
             reward = float(self.stop and at_goal)
         else:
             reward = 0.0
-            reward += -0.01 if dist < prev_dist else -0.02
+            if self.reward_structure == "proximity":
+                reward += -0.01 if dist < prev_dist else -0.02
+            elif self.reward_structure in ("constant", "constant-only"):
+                reward += -0.01
+            elif self.reward_structure == "none":
+                pass
             if self.stop:
-                if at_goal:
+                if at_goal and self.reward_structure != "constant-only":
                     reward += 1.0
                 else:
                     reward += 0
+        info['at_goal'] = at_goal
         return observation, reward, self.stop, info
 
     def step(self, action: np.ndarray) -> StepResult:

@@ -15,19 +15,16 @@ def test_range(size, r_max) -> None:
     c = len(grid) // 2
     grid[c, c] = True
 
-    gran = 10
+    gran = 100
     for i in range(1, gran):
         for j in range(1, gran):
             coords = np.array([i, j])
             coords = (coords / gran) * 2 - 1
             if 1:
                 coords = np.round(coords * r_max)
-                print(coords)
                 norm = get_norm(coords) 
                 if norm > r_max:
                     coords /= norm
-                print(coords)
-                print()
                 coordsi = np.trunc(coords).astype(np.int32)
             else:
                 norm = get_norm(coords)
@@ -42,10 +39,10 @@ def test_range(size, r_max) -> None:
     print()
 
 def main() -> None:
-    test_range(2 ** 3, 2 - 0.001)
+    test_range(2 ** 6, 2 ** 4)
     exit(0)
-    for i in range(0, 3):
-        test_range(2 ** 4, 1 + 2 ** i)
+    for i in range(1, 9):
+        test_range(2 ** 4, i)
 
 if __name__ == "__main__":
     main()

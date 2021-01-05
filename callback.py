@@ -149,7 +149,7 @@ class LoggingCallback(EventCallback):
                         .numpy()
                     )
                 outps = np.array(_outps).squeeze(1)
-                entropies = util.calc_entropies(outps)
+                entropies = util.get_metrics(outps)
                 self.writer.add_scalar(
                     "entropy/argmax", entropies["argmax"], self.num_timesteps
                 )
@@ -158,6 +158,9 @@ class LoggingCallback(EventCallback):
                 )
                 self.writer.add_scalar(
                     "entropy/indiv", entropies["individual"], self.num_timesteps
+                )
+                self.writer.add_scalar(
+                    "entropy/linf", entropies["linf"], self.num_timesteps
                 )
 
             if best_criterion > self.best_mean_reward:
