@@ -1,11 +1,13 @@
 import sys
-from typing import Any, Tuple, List, Callable, Iterator, Union
+from typing import Any, Tuple, List, Callable, Iterator, Union, Dict
 import argparse
 from argparse import Namespace
 from pathlib import Path
 import pickle as pkl
 from functools import partial
 from itertools import chain
+import importlib
+import shutil
 
 import gym  # type: ignore
 from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
@@ -40,7 +42,7 @@ _cfg = argparse.Namespace(
     post_arch=[0x10],
     policy_activation="tanh",
     action_noise=0.0,
-    obs_type="vector",  # vector, direction
+    obs_type="direction",  # vector, direction
     entropy_samples=400,
     eval_freq=20000,
     total_timesteps=5_000_000,
@@ -134,11 +136,11 @@ def make_model(cfg: Namespace) -> Any:
 
 def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     log_dir = base_dir / f"run-{idx}"
+    if (log_dir / "completed").exists():
+        return
+    elif log_dir.exists():
+        shutil.rmtree(log_dir)
     writer = SummaryWriter(log_dir=log_dir)
-    # loggable_hparams = {
-    #     k: v if v in (int, float, bool) else str(v) for k, v in vars(cfg).items()
-    # }
-    # writer.add_hparams(loggable_hparams, {})
     with (log_dir / "config.txt").open("w") as text_fo:
         text_fo.write(str(cfg))
     with (log_dir / "config.pkl").open("wb") as binary_fo:
@@ -163,6 +165,10 @@ def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         total_timesteps=cfg.total_timesteps,
         callback=[logging_callback],
     )
+    with (log_dir / 'completed').open('w') as fo:
+        # Create empty file to show the run is completed in case it gets interrupted
+        # halfway through.
+        pass
 
 
 def run_trials(
@@ -173,21 +179,20 @@ def run_trials(
     return (delayed(do_run)(log_dir, cfg, i) for i in range(num_trials))
 
 
-def run_experiment(name: str, num_trials: int, n_jobs: int) -> None:
-    exper_dir = Path("runs") / name
-    if exper_dir.exists():
-        raise ValueError()
-
+def run_experiments(
+    config_paths: List[str], num_trials: int, n_jobs: int, out_dir=Path("log")
+) -> None:
     jobs: List[Tuple] = []
-    for els in range(4, 8):
-        # for bn_size in (3, 4, 6, 8, 32, 64, 128, 1024):
-        cfg = Namespace(**vars(_cfg))
-        # cfg.pre_arch = list(cfg.pre_arch)
-        # cfg.pre_arch[-1] = bn_size
-        cfg.obs_type = "direction"
-        cfg.env_lsize = els
-        cfg.action_scale = 2 ** (els - 4)
-        jobs.extend(run_trials(exper_dir, cfg, ["env_lsize"], num_trials))
+    for config_path in config_paths:
+        config_name = config_path.split("/")[-1][:-3]
+        out_path = out_dir / config_name
+        module_name = config_path.rstrip("/").replace("/", ".")[:-3]
+        mod: Any = importlib.import_module(module_name)
+        for config in mod.generate_configs():
+            final_config = {**vars(_cfg), **config}
+            cfg = Namespace(**final_config)
+            jobs.extend(run_trials(out_path, cfg, list(config.keys()), num_trials))
+
     if len(jobs) == 1 or n_jobs == 1:
         for j in jobs:
             j[0](*j[1], **j[2])
@@ -339,7 +344,7 @@ def optimality_test() -> None:
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", type=str)
-    parser.add_argument("targets", type=str, nargs="+")
+    parser.add_argument("targets", type=str, nargs="*")
     parser.add_argument("--num_trials", type=int, default=1)
     parser.add_argument("--out_name", "-o", type=str, default="out.csv")
     parser.add_argument("-j", type=int, default=1)
@@ -352,7 +357,7 @@ def main() -> None:
     if args.command == "test":
         aggregate_results(args.targets, args.out_name, args.j)
     elif args.command == "run":
-        run_experiment(args.targets[0], args.num_trials, args.j)
+        run_experiments(args.targets, args.num_trials, args.j)
     elif args.command == "optimal":
         optimality_test()
     else:
