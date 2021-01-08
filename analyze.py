@@ -124,6 +124,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--stddev", action="store_true")
     parser.add_argument("--stderr", action="store_true")
     parser.add_argument("--latex", action="store_true")
+    parser.add_argument("--figures", action="store_true")
     return parser.parse_args()
 
 

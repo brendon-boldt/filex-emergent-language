@@ -295,10 +295,6 @@ def get_lexicon_map(features_extractor: torch.nn.Module) -> None:
                     c = "██"
             elif is_border(m, i, j):
                 c = "██"
-            # elif i % 2 and m[(i-1)//2, j//2] != m[(i+1)//2, j//2]:
-            # c = '██'
-            # elif j % 2 and m[i//2, (j-1)//2] != m[i//2, (j+1)//2]:
-            # c = '██'
             print(c, end="")
         print()
     print()
