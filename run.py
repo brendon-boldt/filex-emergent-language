@@ -8,6 +8,7 @@ from functools import partial
 from itertools import chain
 import importlib
 import shutil
+import uuid
 
 import gym  # type: ignore
 from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
@@ -165,7 +166,7 @@ def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         total_timesteps=cfg.total_timesteps,
         callback=[logging_callback],
     )
-    with (log_dir / 'completed').open('w') as fo:
+    with (log_dir / "completed").open("w") as fo:
         # Create empty file to show the run is completed in case it gets interrupted
         # halfway through.
         pass
@@ -258,7 +259,53 @@ def get_one_hot_vectors(policy: Any) -> np.ndarray:
     return np.array(_data)
 
 
-def collect_metrics(path: Path, discretize) -> pd.DataFrame:
+def is_border(m, i, j) -> bool:
+    if i % 2 and m[(i - 1) // 2, j // 2] != m[(i + 1) // 2, j // 2]:
+        return True
+    elif j % 2 and m[i // 2, (j - 1) // 2] != m[i // 2, (j + 1) // 2]:
+        return True
+    return False
+
+
+def get_lexicon_map(features_extractor: torch.nn.Module) -> None:
+    n_divs = 40
+    m = np.zeros([n_divs + 1] * 2, dtype=np.int64)
+    bound = 0.2
+    print()
+    print()
+    for i in range(n_divs + 1):
+        for j in range(n_divs + 1):
+            with torch.no_grad():
+                inp = torch.tensor(
+                    [-bound + 2 * bound * i / n_divs, -bound + 2 * bound * j / n_divs]
+                )
+                m[i, j] = features_extractor.pre_net(inp).argmax().item()  # type: ignore
+    for i in range(2 * n_divs - 1):
+        for j in range(2 * n_divs - 1):
+            c = "  "
+            if not i % 2 and not j % 2:
+                c = f"{m[i//2,j//2]:>2d}"
+            elif i % 2 and j % 2:
+                if sum(
+                    [
+                        is_border(m, i + x, j + y)
+                        for x, y in [(-1, 0), (0, -1), (1, 0), (0, 1)]
+                    ]
+                ):
+                    c = "██"
+            elif is_border(m, i, j):
+                c = "██"
+            # elif i % 2 and m[(i-1)//2, j//2] != m[(i+1)//2, j//2]:
+            # c = '██'
+            # elif j % 2 and m[i//2, (j-1)//2] != m[i//2, (j+1)//2]:
+            # c = '██'
+            print(c, end="")
+        print()
+    print()
+    print()
+
+
+def collect_metrics(path: Path, out_path: Path, discretize) -> pd.DataFrame:
     with (path / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
     cfg = patch_old_configs(cfg)
@@ -278,7 +325,9 @@ def collect_metrics(path: Path, discretize) -> pd.DataFrame:
         bottleneck_values.extend(bns)
     np_bn_values = np.stack(bottleneck_values)
     entropies = util.get_metrics(np_bn_values)
+    sample_id = str(uuid.uuid4())
     contents = {
+        "uuid": sample_id,
         "steps": np.mean(steps_values),
         "success_rate": successes / cfg_test.n_test_episodes,
         **entropies,
@@ -303,14 +352,16 @@ def expand_paths(path_like: Union[str, Path]) -> List[Path]:
     return paths
 
 
-def aggregate_results(path_strs: List[str], out_name: str, n_jobs: int) -> None:
+def aggregate_results(path_strs: List[str], out_dir: Path, n_jobs: int) -> None:
     paths = [x for p in path_strs for x in expand_paths(p)]
     jobs = [
-        delayed(collect_metrics)(p, discretize=d) for d in (True, False) for p in paths
+        delayed(collect_metrics)(p, out_dir, discretize=d)
+        for d in (True, False)
+        for p in paths
     ]
     results = Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs))
     df = pd.concat(results, ignore_index=True)
-    df.to_csv(out_name, index=False)
+    df.to_csv(out_dir / "data.csv", index=False)
 
 
 def optimality_test() -> None:
@@ -346,16 +397,17 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("command", type=str)
     parser.add_argument("targets", type=str, nargs="*")
     parser.add_argument("--num_trials", type=int, default=1)
-    parser.add_argument("--out_name", "-o", type=str, default="out.csv")
+    parser.add_argument("--out_dir", "-o", type=str, default=".")
     parser.add_argument("-j", type=int, default=1)
     return parser.parse_args()
 
 
 def main() -> None:
     args = get_args()
+    args.out_dir = Path(args.out_dir)
 
     if args.command == "test":
-        aggregate_results(args.targets, args.out_name, args.j)
+        aggregate_results(args.targets, args.out_dir, args.j)
     elif args.command == "run":
         run_experiments(args.targets, args.num_trials, args.j)
     elif args.command == "optimal":
