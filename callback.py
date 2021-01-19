@@ -50,6 +50,7 @@ class LoggingCallback(EventCallback):
         render: bool = False,
         verbose: int = 1,
         entropy_samples: int = 0,
+        save_all_checkpoints: bool = False,
     ) -> None:
         super(self.__class__, self).__init__(callback_on_new_best, verbose=verbose)
         self.n_eval_episodes = n_eval_episodes
@@ -60,6 +61,7 @@ class LoggingCallback(EventCallback):
         self.render = render
         self.writer = writer
         self.entropy_samples = entropy_samples
+        self.save_all_checkpoints = save_all_checkpoints
 
         # Convert to VecEnv for consistency
         if not isinstance(eval_env, VecEnv):
@@ -92,19 +94,44 @@ class LoggingCallback(EventCallback):
             # Sync training and eval env if there is VecNormalize
             sync_envs_normalization(self.training_env, self.eval_env)
 
-            episode_rewards, episode_lengths = evaluate_policy(
-                self.model,
-                self.eval_env,
-                n_eval_episodes=self.n_eval_episodes,
-                render=self.render,
-                deterministic=self.deterministic,
-                return_episode_rewards=True,
+            if self.model is None or self.model.policy is None:
+                raise ValueError("Model/policy is None.")
+            episode_rewards = []
+            episode_lengths = []
+            bn_activations = []
+            # n_eval_episodes is the _actually_ the number of steps
+            while sum(episode_lengths) < self.n_eval_episodes:
+                ep_len, bns, success = util.eval_episode(
+                    self.model.policy,
+                    self.model.policy.features_extractor,
+                    self.eval_env.envs[0],
+                    True,
+                )
+                episode_rewards.append(success)
+                episode_lengths.append(ep_len)
+                bn_activations.extend(bns)
+            bn_activations = np.array(bn_activations)
+
+            entropies = util.get_metrics(bn_activations)
+            self.writer.add_scalar(
+                "entropy/argmax", entropies["argmax"], self.num_timesteps
             )
+            # self.writer.add_scalar(
+            #     "entropy/frac", entropies["fractional"], self.num_timesteps
+            # )
+            # self.writer.add_scalar(
+            #     "entropy/indiv", entropies["individual"], self.num_timesteps
+            # )
+            # self.writer.add_scalar(
+            #     "entropy/linf", entropies["linf"], self.num_timesteps
+            # )
 
             if self.log_path is not None:
                 self.evaluations_timesteps.append(self.num_timesteps)
-                self.evaluations_results.append(episode_rewards)
-                self.evaluations_length.append(episode_lengths)
+                self.evaluations_results.append(
+                    sum(episode_rewards) / len(episode_rewards)
+                )
+                self.evaluations_length.append(np.mean(episode_lengths))
                 np.savez(
                     self.log_path / "data",
                     timesteps=self.evaluations_timesteps,
@@ -136,7 +163,6 @@ class LoggingCallback(EventCallback):
             self.writer.add_scalar("rate", self.num_timesteps, self.num_timesteps)
 
             if self.entropy_samples > 0 and self.model and self.model.policy:
-                # TODO Should I be running this across episodes?
                 _outps = []
                 for _ in range(self.entropy_samples):
                     obs = torch.FloatTensor(self.eval_env.reset()).to(
@@ -149,20 +175,12 @@ class LoggingCallback(EventCallback):
                         .numpy()
                     )
                 outps = np.array(_outps).squeeze(1)
-                entropies = util.get_metrics(outps)
-                self.writer.add_scalar(
-                    "entropy/argmax", entropies["argmax"], self.num_timesteps
-                )
-                self.writer.add_scalar(
-                    "entropy/frac", entropies["fractional"], self.num_timesteps
-                )
-                self.writer.add_scalar(
-                    "entropy/indiv", entropies["individual"], self.num_timesteps
-                )
-                self.writer.add_scalar(
-                    "entropy/linf", entropies["linf"], self.num_timesteps
-                )
 
+            if self.save_all_checkpoints:
+                torch.save(
+                    self.model.policy.state_dict(),
+                    self.log_path / f"model-{self.num_timesteps}.pt",
+                )
             if best_criterion > self.best_mean_reward:
                 if self.verbose > 0:
                     print("New best mean reward!")

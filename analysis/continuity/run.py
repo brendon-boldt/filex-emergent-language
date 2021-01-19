@@ -1,5 +1,5 @@
-import sys
 from pathlib import Path
+from typing import List
 
 import pandas as pd  # type: ignore
 from matplotlib import pyplot as plt  # type: ignore
@@ -7,23 +7,50 @@ from matplotlib import pyplot as plt  # type: ignore
 import analyze  # type: ignore
 
 
+def cluster_table(args, df: pd.DataFrame, proporition=False) -> None:
+    df = df.loc[df['discretize'] == True].copy()
+    groups = ["action_scale", 'clusters']
+    analyze.add_cluster_number(df)
+    for i in range(df["clusters"].min(), df["clusters"].max() + 1):
+        df[f"clusters_{i}"] = df["clusters"] == i
+    grouped = df.groupby(groups)
+    fields: List[str] = ['steps']
+
+    if proporition:
+        # TODO 60 should not be hardcoded in here
+        table = (grouped.count()[fields] / 60).round(2)
+    else:
+        table = grouped.mean()[fields].round(2)
+    # table["clusters"] = grouped.mean()["clusters"].round(2)
+    for i in range(df["clusters"].min(), df["clusters"].max() + 1):
+        # table[f"clusters_{i}"] = grouped.mean()[f"clusters_{i}"].round(2)
+        pass
+
+    table = table.rename(
+        columns={
+            "steps": "Steps",
+            "fractional": "$H$",
+        },
+        # index={1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6},
+    )
+    table.index.names = ["Scale", "Actions"]
+    table = table.unstack("Actions")
+
+    if args.latex:
+        print(analyze.to_latex(table))
+    else:
+        print(table)
+
+
 def main(args, path: Path) -> None:
     df = pd.read_csv(path / "data.csv")
+    cluster_table(args, df.copy())
+    cluster_table(args, df.copy(), True)
     groups = ["discretize", "action_scale"]
-    analyze.add_cluster_number(df)
-    for i in range(df['clusters'].min(), df['clusters'].max() + 1):
-        df[f'clusters_{i}'] = df['clusters'] == i
     grouped = df.groupby(groups)
-    fields = ["steps", "fractional", "clusters"]
+    fields = ["steps", "fractional"]
 
-    # analyze.make_snowflake_plot(df, groups, path / "figs")
-
-    # table = grouped.mean()[fields].round(2)
     table = grouped.median()[fields].round(2)
-    table['clusters'] = grouped.mean()['clusters'].round(2)
-    for i in range(df['clusters'].min(), df['clusters'].max() + 1):
-        table[f'clusters_{i}'] = grouped.mean()[f'clusters_{i}'].round(2)
-    # table = table.reindex(columns=['steps', 'steps_std', 'fractional', 'fractional_std'])
 
     table["steps"] = table["steps"].round(1)
     table = table.rename(
@@ -31,23 +58,17 @@ def main(args, path: Path) -> None:
             "steps": "Steps",
             "success_rate": "Success",
             "fractional": "$H$",
-            "discretize": "One-Hot",
         },
+    )
+    table = table.rename(
+        index={False: "No", True: "Yes"},
+        level=0,
         # index={1: 0, 2: 1, 4: 2, 8: 3, 16: 4, 32: 5, 64: 6},
     )
-    table.index.names = ["One-Hot", "Size"]
+    table.index.names = ["One-Hot", "Scale"]
 
-    if False:
-        fig, axes = plt.subplots(nrows=4, figsize=(6, 6))
-        for i, p in enumerate(range(4, 8)):
-            # ax = plt.axes(label=f"{i**2}")
-            ax = axes[i]
-            ax.set_xlim(xmin=10, xmax=32)
-            ax.set_ylim(ymax=25)
-            # ax.set_xbound(lower=10,x_max=35)
-            data = df.loc[(df.env_lsize == p) & (df.discretize == False)]["steps"]
-            ax.hist(data)
-        plt.savefig(f"figs/4567.png")
+    if args.figures:
+        analyze.make_snowflake_plot(df, groups, path / "figs", variant="columns")
 
     if args.latex:
         print(analyze.to_latex(table))

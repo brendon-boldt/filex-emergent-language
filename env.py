@@ -12,6 +12,8 @@ rng = np.random.default_rng()
 def norm(x):
     return np.sqrt((x ** 2).sum(-1))
 
+def cosine_distance(x, y) -> float:
+    return (x * y).sum() / max(norm(x) * norm(y), 1e-5)
 
 # Spirals outward
 DISCRETE_ACT_DICT = {
@@ -39,6 +41,7 @@ class Scalable(gym.Env):
         reward_structure: str,
         action_noise: float,
         obs_type: str,
+        env_shape: str,
         *,
         lsize: int,
         obs_lscale: int = None,
@@ -76,7 +79,9 @@ class Scalable(gym.Env):
             elif action_scale == 2:
                 n_act = 13
             else:
-                raise ValueError(f"Cannot handle discrete action scale '{action_scale}'")
+                raise ValueError(
+                    f"Cannot handle discrete action scale '{action_scale}'"
+                )
             self.action_space = spaces.Discrete(n_act)
         else:
             self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
@@ -110,10 +115,12 @@ class Scalable(gym.Env):
 
         self.action_noise = action_noise
 
+        assert env_shape in ("circle", "square")
+        self.env_shape = env_shape
+
         # For type purposes
         self.num_steps = 0
         self.stop = False
-
 
     def _take_action(self, action: Union[np.int64, np.ndarray]) -> None:
         if self.discrete_action:
@@ -127,7 +134,7 @@ class Scalable(gym.Env):
             action = np.round(action * self.action_scale)
             act_norm = norm(action)
             if act_norm > self.action_scale:
-                action *= self.action_scale / act_norm 
+                action *= self.action_scale / act_norm
             final_action = action.astype(np.int32)
         self.location = np.clip(
             self.location + final_action,
@@ -152,7 +159,7 @@ class Scalable(gym.Env):
             observation = (_observation * 255).astype(np.uint8)
         else:
             observation = (self.goal_location - self.location) / self.size
-            if self.obs_type == 'direction':
+            if self.obs_type == "direction":
                 observation /= max(norm(observation), 1e-5)
 
         diff = (self.location - self.goal_location) / self.size
@@ -164,15 +171,23 @@ class Scalable(gym.Env):
         if (self.num_steps > 0 and at_goal) or self.num_steps > self.max_steps:
             self.stop = True
 
+        prev_vec = self.goal_location - prev_location
+        cur_vec = self.location - prev_location
+        cosine_dist = cosine_distance(prev_vec, cur_vec)
         if self.single_step:
-            reward = 1.0 if dist < prev_dist else -1.0
+            reward = cosine_dist
+            # reward = 1.0 if dist < prev_dist else -1.0
             self.stop = self.num_steps > 0
+            info["at_goal"] = reward
         elif self.is_eval:
             reward = float(self.stop and at_goal)
+            info["at_goal"] = at_goal
         else:
+            info["at_goal"] = at_goal
             reward = 0.0
             if self.reward_structure == "proximity":
-                reward += -0.01 if dist < prev_dist else -0.02
+                # reward += -0.01 if dist < prev_dist else -0.02
+                reward += -0.01 * (2 - cosine_dist)
             elif self.reward_structure in ("constant", "constant-only"):
                 reward += -0.01
             elif self.reward_structure == "none":
@@ -182,7 +197,6 @@ class Scalable(gym.Env):
                     reward += 1.0
                 else:
                     reward += 0
-        info['at_goal'] = at_goal
         return observation, reward, self.stop, info
 
     def step(self, action: np.ndarray) -> StepResult:
@@ -194,11 +208,63 @@ class Scalable(gym.Env):
         self._take_action(action)
         return self._get_observation(prev_location)
 
+    def _in_circle(self, x) -> bool:
+        return ((x - (self.size - 1) / 2) ** 2).sum() < (self.size / 2) ** 2
+
+    def _is_valid_start(self) -> bool:
+        if self.env_shape == "circle":
+            return (
+                not self._is_at_goal()
+                and self._in_circle(self.goal_location)
+                and self._in_circle(self.location)
+            )
+        else:
+            return not self._is_at_goal()
+
     def reset(self) -> np.ndarray:
         self.location = rng.integers(0, self.size, (2,))
         self.goal_location = rng.integers(0, self.size, (2,))
-        while self._is_at_goal():
+        while not self._is_valid_start():
+            self.location = rng.integers(0, self.size, (2,))
             self.goal_location = rng.integers(0, self.size, (2,))
         self.stop = False
         self.num_steps = 0
         return self._get_observation(self.location)[0]
+
+
+class Supervised(gym.Env):
+    # TODO Randomize
+    angle_offset = np.pi / 4.
+    # TODO Parameterize
+    n_actions = 8
+
+    def __init__(
+        self,
+        *args,
+        is_eval=False,
+        **kwargs,
+    ) -> None:
+        super(self.__class__, self).__init__()
+        if self.angle_offset is None:
+            self.angle_offset = rng.random() * 2 * np.pi / self.n_actions
+        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
+        self.is_eval = is_eval
+        self.observation_space = spaces.Box(
+            low=-1.0, high=1.0, shape=(2,), dtype=np.float32
+        )
+        self.discrete_action = False
+        self.use_reward = False
+
+
+    def step(self, action: np.ndarray) -> StepResult:
+        if False or self.is_eval:
+            reward = cosine_distance(action, self.target_vector)
+        else:
+            reward = -((action - self.target_vector) ** 2).sum() / 10
+        return self.target_vector, reward, True, {"at_goal": True}
+
+    def reset(self) -> np.ndarray:
+        idx = rng.integers(0, self.n_actions)
+        angle = self.angle_offset + 2 * np.pi * idx / self.n_actions
+        self.target_vector = np.array([np.sin(angle), np.cos(angle)])
+        return self.target_vector

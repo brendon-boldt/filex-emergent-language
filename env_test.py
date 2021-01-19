@@ -38,8 +38,20 @@ def test_range(size, r_max) -> None:
     print_grid(grid)
     print()
 
+def test_circle(size, r_max) -> None:
+    grid = np.zeros([size] * 2, dtype=np.bool)
+    c = (size - 1) / 2
+    for i in range(size):
+        for j in range(size):
+            grid[i, j] = (c - i) ** 2 + (c - j) ** 2 < (size / 2) ** 2
+
+    print(r_max)
+    print_grid(grid)
+    print()
+
 def main() -> None:
-    test_range(2 ** 6, 2 ** 4)
+    # test_circle(2 ** 5, 0)
+    test_range(2 ** 7, 2 ** 5)
     exit(0)
     for i in range(1, 9):
         test_range(2 ** 4, i)

@@ -1,5 +1,5 @@
 import sys
-from typing import Any, Tuple, List, Callable, Iterator, Union, Dict
+from typing import Any, Tuple, List, Callable, Iterator, Union, Dict, Optional
 import argparse
 from argparse import Namespace
 from pathlib import Path
@@ -32,24 +32,26 @@ from callback import LoggingCallback
 import util
 
 _cfg = argparse.Namespace(
-    env_lsize=7,
-    action_scale=2 ** 3,
+    env_class=E.Scalable,
+    env_shape="circle",  # square, circle
+    env_lsize=8,
+    action_scale=2 ** 4,
     discrete_action=False,
     bottleneck="gsm",
     bottleneck_temperature=1.0,
     reward_structure="proximity",  # constant, none, proximity, constant-only
     policy_net_arch=[0x40] * 0,  # default: [0x40] * 2,
-    pre_arch=[0x10, 0x10],
-    post_arch=[0x10],
+    pre_arch=[0x20, 0x20],
+    post_arch=[0x20],
     policy_activation="tanh",
     action_noise=0.0,
     obs_type="direction",  # vector, direction
     entropy_samples=400,
-    eval_freq=20000,
-    total_timesteps=5_000_000,
+    eval_freq=20_000,
+    total_timesteps=500_000,
     reward_threshold=0.95,
     max_step_scale=4.5,  # default: 2.5
-    eval_episodes=500,
+    eval_steps=500 * 12,  # 12 is approx the average ep len of a converged model
     fe_out_size=0x10,
     fe_out_ratio=4,
     pixel_space=False,
@@ -60,6 +62,8 @@ _cfg = argparse.Namespace(
     batch_size=0x100,  # Was 0x100
     learning_rate=3e-4,  # default: 3-e4
     single_step=False,
+    save_all_checkpoints=False,
+    init_model_path=None,
 )
 
 cfg_test = Namespace(
@@ -79,6 +83,7 @@ def make_env(env_constructor, rank, seed=0):
 
 def make_env_kwargs(cfg: Namespace) -> gym.Env:
     return {
+        "env_shape": cfg.env_shape,
         "obs_type": cfg.obs_type,
         "action_noise": cfg.action_noise,
         "reward_structure": cfg.reward_structure,
@@ -113,10 +118,10 @@ def make_model(cfg: Namespace) -> Any:
     env_kwargs = make_env_kwargs(cfg)
     if cfg.pixel_space:
         env_lam: Callable = lambda: VecTransposeImage(
-            DummyVecEnv([lambda: E.Scalable(**env_kwargs)])
+            DummyVecEnv([lambda: cfg.env_class(**env_kwargs)])
         )
     else:
-        env_lam = lambda: E.Scalable(**env_kwargs)
+        env_lam = lambda: cfg.env_class(**env_kwargs)
     if cfg.n_proc_alg > 1:
         env = SubprocVecEnv([make_env(env_lam, i) for i in range(cfg.n_proc_alg)])
     else:
@@ -132,6 +137,11 @@ def make_model(cfg: Namespace) -> Any:
         learning_rate=cfg.learning_rate,
         device=cfg.device,
     )
+    if cfg.init_model_path is not None:
+        try:
+            model.policy.load_state_dict(torch.load(cfg.init_model_path))
+        except:
+            return None
     return model
 
 
@@ -149,33 +159,35 @@ def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     env_kwargs = make_env_kwargs(cfg)
     if cfg.pixel_space:
         env_eval: Any = VecTransposeImage(
-            DummyVecEnv([lambda: E.Scalable(is_eval=True, **env_kwargs)])
+            DummyVecEnv([lambda: cfg.env_class(is_eval=True, **env_kwargs)])
         )
     else:
-        env_eval = DummyVecEnv([lambda: E.Scalable(is_eval=True, **env_kwargs)])
+        env_eval = DummyVecEnv([lambda: cfg.env_class(is_eval=True, **env_kwargs)])
     logging_callback = LoggingCallback(
         eval_env=env_eval,
-        n_eval_episodes=cfg.eval_episodes,
+        n_eval_episodes=cfg.eval_steps,
         eval_freq=cfg.eval_freq,
         writer=writer,
         verbose=0,
         entropy_samples=cfg.entropy_samples,
+        save_all_checkpoints=cfg.save_all_checkpoints,
     )
     model = make_model(cfg)
+    if model is None:
+        raise ValueError("Could not restore model.")
     model.learn(
         total_timesteps=cfg.total_timesteps,
         callback=[logging_callback],
     )
-    with (log_dir / "completed").open("w") as fo:
-        # Create empty file to show the run is completed in case it gets interrupted
-        # halfway through.
-        pass
+    # Create empty file to show the run is completed in case it gets interrupted
+    # halfway through.
+    (log_dir / "completed").open("w")
 
 
 def run_trials(
     base_dir: Path, cfg: Namespace, name_props: List[str], num_trials: int
 ) -> Iterator[Any]:
-    name = "_".join(str(getattr(cfg, prop)) for prop in name_props)
+    name = "_".join(str(getattr(cfg, prop)).replace("/", ",") for prop in name_props)
     log_dir = base_dir / name
     return (delayed(do_run)(log_dir, cfg, i) for i in range(num_trials))
 
@@ -202,6 +214,10 @@ def run_experiments(
 
 
 def patch_old_configs(cfg: Namespace) -> Namespace:
+    if not hasattr(cfg, "init_model_path"):
+        cfg.init_model_path = None
+    if not hasattr(cfg, "env_shape"):
+        cfg.obs_type = "square"
     if not hasattr(cfg, "obs_type"):
         cfg.obs_type = "vector"
     if not hasattr(cfg, "policy_activation"):
@@ -217,33 +233,6 @@ def patch_old_configs(cfg: Namespace) -> Namespace:
     if not hasattr(cfg, "discrete_action"):
         cfg.discrete_action = False
     return cfg
-
-
-def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, bool]:
-    obs = env.reset()
-    done = False
-    steps = 0
-    bns = []
-    if discretize:
-        policy.features_extractor.bottleneck = partial(
-            torch.nn.functional.gumbel_softmax, tau=1e-20
-        )
-    while not done:
-        obs_tensor = torch.Tensor(obs)
-        with torch.no_grad():
-            policy_out = policy(obs_tensor)
-            if env.discrete_action:
-                act = np.int64(policy_out[0].numpy())
-            else:
-                act = policy_out[0].numpy()
-            # act, _ = model.predict(obs, state=None, deterministic=True)
-            # act = policy_out[0].numpy()
-            # act = policy(obs_tensor)[0].numpy()
-            bn = fe.forward_bottleneck(obs_tensor).numpy()
-        bns.append(bn)
-        obs, _, done, info = env.step(act)
-        steps += 1
-    return steps, bns, info["at_goal"]
 
 
 def get_one_hot_vectors(policy: Any) -> np.ndarray:
@@ -270,7 +259,8 @@ def is_border(m, i, j) -> bool:
 def get_lexicon_map(features_extractor: torch.nn.Module) -> None:
     n_divs = 40
     m = np.zeros([n_divs + 1] * 2, dtype=np.int64)
-    bound = 0.2
+    bound = 1.0
+    # bound = 0.2
     print()
     print()
     for i in range(n_divs + 1):
@@ -297,32 +287,45 @@ def get_lexicon_map(features_extractor: torch.nn.Module) -> None:
                 c = "██"
             print(c, end="")
         print()
-    print()
-    print()
 
 
-def collect_metrics(path: Path, out_path: Path, discretize) -> pd.DataFrame:
-    with (path / "config.pkl").open("rb") as fo:
+def collect_metrics(
+    model_path: Path, out_path: Path, discretize
+) -> Optional[pd.DataFrame]:
+    with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
     cfg = patch_old_configs(cfg)
-    env = E.Scalable(is_eval=True, **make_env_kwargs(cfg))
+    env = cfg.env_class(is_eval=True, **make_env_kwargs(cfg))
     model = make_model(cfg)
+    if model is None:
+        print(f'Could not restore model "{cfg.init_model_path}"')
+        return None 
     policy = model.policy
-    policy.load_state_dict(torch.load(path / "best.pt"))
+    try:
+        policy.load_state_dict(torch.load(model_path))
+    except:
+        return None
     vectors = get_one_hot_vectors(model.policy)
     features_extractor = policy.features_extractor.cpu()
     bottleneck_values = []
     steps_values = []
-    successes = 0
+    successes = 0.0
+    # get_lexicon_map(features_extractor)
     for ep in range(cfg_test.n_test_episodes):
-        lens, bns, success = eval_episode(policy, features_extractor, env, discretize)
+        ep_len, bns, success = util.eval_episode(
+            policy, features_extractor, env, discretize
+        )
         successes += success
-        steps_values.append(lens)
+        steps_values.append(ep_len)
         bottleneck_values.extend(bns)
     np_bn_values = np.stack(bottleneck_values)
     entropies = util.get_metrics(np_bn_values)
+    # print(entropies['fractional'])
+    # print()
+    # print()
     sample_id = str(uuid.uuid4())
     contents = {
+        "path": str(model_path),
         "uuid": sample_id,
         "steps": np.mean(steps_values),
         "success_rate": successes / cfg_test.n_test_episodes,
@@ -335,27 +338,46 @@ def collect_metrics(path: Path, out_path: Path, discretize) -> pd.DataFrame:
     return pd.DataFrame({k: [v] for k, v in contents.items()})
 
 
-def expand_paths(path_like: Union[str, Path]) -> List[Path]:
+def expand_paths(
+    path_like: Union[str, Path], progression: bool, target_ts: Optional[int]
+) -> List[Path]:
     root = Path(path_like)
     if not root.is_dir():
         return []
     contents = {x for x in root.iterdir()}
     names = {x.name for x in contents}
     paths = []
-    if len({"best.pt", "config.pkl"} & names) == 2:
-        paths.append(root)
-    paths.extend(x for c in contents for x in expand_paths(c))
+    target_fn = "best.pt" if target_ts is None else f"model-{target_ts}.pt"
+    if progression:
+        new_paths = sorted(
+            root.glob("model*.pt"),
+            key=lambda x: int(str(x).split("-")[-1].split(".")[0]),
+        )
+        paths.extend(new_paths)
+    elif len({target_fn, "config.pkl"} & names) == 2:
+        paths.append(root / target_fn)
+    paths.extend(x for c in contents for x in expand_paths(c, progression, target_ts))
     return paths
 
 
-def aggregate_results(path_strs: List[str], out_dir: Path, n_jobs: int) -> None:
-    paths = [x for p in path_strs for x in expand_paths(p)]
+def aggregate_results(
+    path_strs: List[str],
+    out_dir: Path,
+    n_jobs: int,
+    progression: bool,
+    target_ts: Optional[int],
+) -> None:
+    paths = [x for p in path_strs for x in expand_paths(p, progression, target_ts)]
+    paths = paths[:30]
     jobs = [
         delayed(collect_metrics)(p, out_dir, discretize=d)
-        for d in (True, False)
+        # for d in (True, False)
+        for d in (True,)
         for p in paths
     ]
+    # jobs[0][0](*jobs[0][1], **jobs[0][2])
     results = Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs))
+    results = [r for r in results if r is not None]
     df = pd.concat(results, ignore_index=True)
     df.to_csv(out_dir / "data.csv", index=False)
 
@@ -394,6 +416,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("targets", type=str, nargs="*")
     parser.add_argument("--num_trials", type=int, default=1)
     parser.add_argument("--out_dir", "-o", type=str, default=".")
+    parser.add_argument("--progression", action="store_true")
+    parser.add_argument("--target_ts", type=int, default=None)
     parser.add_argument("-j", type=int, default=1)
     return parser.parse_args()
 
@@ -403,7 +427,9 @@ def main() -> None:
     args.out_dir = Path(args.out_dir)
 
     if args.command == "test":
-        aggregate_results(args.targets, args.out_dir, args.j)
+        aggregate_results(
+            args.targets, args.out_dir, args.j, args.progression, args.target_ts
+        )
     elif args.command == "run":
         run_experiments(args.targets, args.num_trials, args.j)
     elif args.command == "optimal":

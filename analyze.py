@@ -1,7 +1,7 @@
 import argparse
 import importlib
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Optional
 from itertools import product
 import math
 
@@ -14,7 +14,7 @@ def to_latex(df: pd.DataFrame) -> str:
     return df.to_latex(
         escape=False,
         formatters={
-            df.columns[i]: lambda x: f"${x}$"
+            df.columns[i]: lambda x: f"${x}$" if not pd.isna(x) else "-"
             for i in range(len(df.columns))
             if df.dtypes[i].kind in ("i", "f")
         },
@@ -22,7 +22,7 @@ def to_latex(df: pd.DataFrame) -> str:
 
 
 def get_vector_clusters(vectors: np.ndarray, uses: np.ndarray) -> int:
-    prob_thresh = 0.9
+    prob_thresh = 0.90
     angle_thresh = 2 * np.pi / 20
     idx = uses.argsort()[::-1]
     angles = np.arctan2(vectors[:, 0], vectors[:, 1])
@@ -45,11 +45,13 @@ def add_cluster_number(df: pd.DataFrame) -> None:
         n = get_vector_clusters(np.array(eval(vecs)), np.array(eval(uses)))
         # df.iloc[i]["clusters"] = clusters
         clusters.append(n)
-    df['clusters'] = clusters
+    df["clusters"] = clusters
 
 
 # def make_angle_plot(vectors: np.ndarray, usages: np.ndarray)
-def make_snowflake_plot(df: pd.DataFrame, groups: List[str], path: Path) -> None:
+def make_snowflake_plot(
+    df: pd.DataFrame, groups: List[str], path: Path, variant: Optional[str] = None
+) -> None:
     if not path.exists():
         path.mkdir()
     path = path / "snowflake"
@@ -58,22 +60,32 @@ def make_snowflake_plot(df: pd.DataFrame, groups: List[str], path: Path) -> None
     valss = product(*(df[groups[i]].unique() for i in range(len(groups))))
     for vals in valss:
         filtered = df.loc[(df[groups] == vals).all(1)]
-        # TEMP
-        filtered = filtered[:16]
-        row_len = math.ceil(math.sqrt(len(filtered)))
-        fig, axes = plt.subplots(row_len, row_len, figsize=(8, 8))
+        filtered = filtered[:9]
+        if variant == "columns":
+            plot_shape = (4, 2)
+            random_idxs = np.random.default_rng().choice(
+                len(filtered), np.prod(plot_shape)
+            )
+            filtered = filtered.iloc[random_idxs]
+            fig, axes = plt.subplots(*plot_shape, figsize=tuple(reversed(plot_shape)))
+        else:
+            row_len = math.ceil(math.sqrt(len(filtered)))
+            fig, axes = plt.subplots(row_len, row_len, figsize=(8, 8))
         for axis, row in zip(axes.reshape(-1), filtered.itertuples()):
-            # print(f"{row.fractional:.2f}")
-            # print(' '.join(f"{x:.2f}" for x in reversed(sorted(eval(row.usages)))))
             axis.axis("off")
             axis.set_xlim(-1.1, 1.1)
             axis.set_ylim(-1.1, 1.1)
             vectors = np.array(eval(row.vectors))
             uses = np.array(eval(row.usages))
-            axis.set_title(f"{row.fractional:.2f} | {row.steps:.1f}")
-            # clusters = get_vector_clusters(vectors, uses)
+            clusters = get_vector_clusters(vectors, uses)
             # axis.set_title(f"{clusters:.2f}")
+            # axis.set_title(f"{row.fractional:.2f} - {clusters} - {row.steps:.1f}")
+            if variant != "columns":
+                pass
+                # axis.set_title(f"{row.fractional:.2f} - {row.steps:.1f}")
             for vector, use in zip(vectors, uses):
+                norm = (vector ** 2).sum() ** 0.5
+                vector /= max(norm, 1.)
                 axis.plot(
                     [0, vector[0]], [0, vector[1]], color="blue", alpha=use / max(uses)
                 )
