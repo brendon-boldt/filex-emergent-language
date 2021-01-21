@@ -176,7 +176,7 @@ class LoggingCallback(EventCallback):
                     )
                 outps = np.array(_outps).squeeze(1)
 
-            if self.save_all_checkpoints:
+            if self.save_all_checkpoints or (self.num_timesteps % 100_000) == 0:
                 torch.save(
                     self.model.policy.state_dict(),
                     self.log_path / f"model-{self.num_timesteps}.pt",

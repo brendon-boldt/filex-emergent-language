@@ -41,11 +41,14 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float]:
     while not done:
         obs_tensor = torch.Tensor(obs)
         with torch.no_grad():
-            policy_out = policy(obs_tensor)
+            policy_out = policy(obs_tensor, deterministic=True)
             if env.discrete_action:
                 act = np.int64(policy_out[0].numpy())
             else:
-                act = policy_out[0].numpy()
+                if type(policy_out) == tuple:
+                    act = policy_out[0].numpy()
+                else:
+                    act = policy_out.numpy()
             bn = fe.forward_bottleneck(obs_tensor).numpy()
         bns.append(bn)
         obs, reward, done, info = env.step(act)

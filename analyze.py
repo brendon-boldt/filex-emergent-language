@@ -61,6 +61,8 @@ def make_snowflake_plot(
     for vals in valss:
         filtered = df.loc[(df[groups] == vals).all(1)]
         filtered = filtered[:9]
+        if not len(filtered):
+            continue
         if variant == "columns":
             plot_shape = (4, 2)
             random_idxs = np.random.default_rng().choice(

@@ -32,25 +32,25 @@ from callback import LoggingCallback
 import util
 
 _cfg = argparse.Namespace(
-    env_class=E.Scalable,
+    env_class=E.Virtual,
     env_shape="circle",  # square, circle
     env_lsize=8,
     action_scale=2 ** 4,
     discrete_action=False,
     bottleneck="gsm",
     bottleneck_temperature=1.0,
-    reward_structure="proximity",  # constant, none, proximity, constant-only
+    # reward_structure="proximity",  # constant, none, proximity, constant-only
     policy_net_arch=[0x40] * 0,  # default: [0x40] * 2,
     pre_arch=[0x20, 0x20],
     post_arch=[0x20],
     policy_activation="tanh",
     action_noise=0.0,
-    obs_type="direction",  # vector, direction
+    # obs_type="direction",  # vector, direction
     entropy_samples=400,
     eval_freq=20_000,
     total_timesteps=500_000,
     reward_threshold=0.95,
-    max_step_scale=4.5,  # default: 2.5
+    # max_step_scale=4.5,  # default: 2.5
     eval_steps=500 * 12,  # 12 is approx the average ep len of a converged model
     fe_out_size=0x10,
     fe_out_ratio=4,
@@ -61,9 +61,17 @@ _cfg = argparse.Namespace(
     n_steps=0x400,  # Was 0x80
     batch_size=0x100,  # Was 0x100
     learning_rate=3e-4,  # default: 3-e4
-    single_step=False,
+    # single_step=False,
     save_all_checkpoints=False,
     init_model_path=None,
+    # Virtual args
+    reward_structure="cosine",
+    obs_type="direction",
+    single_step=False,
+    goal_radius=1.0,
+    world_radius=16.0,
+    max_step_scale=3.0,
+    variant=None,
 )
 
 cfg_test = Namespace(
@@ -83,6 +91,9 @@ def make_env(env_constructor, rank, seed=0):
 
 def make_env_kwargs(cfg: Namespace) -> gym.Env:
     return {
+        "variant": cfg.variant,
+        "goal_radius": cfg.goal_radius,
+        "world_radius": cfg.world_radius,
         "env_shape": cfg.env_shape,
         "obs_type": cfg.obs_type,
         "action_noise": cfg.action_noise,
@@ -118,24 +129,32 @@ def make_model(cfg: Namespace) -> Any:
     env_kwargs = make_env_kwargs(cfg)
     if cfg.pixel_space:
         env_lam: Callable = lambda: VecTransposeImage(
-            DummyVecEnv([lambda: cfg.env_class(**env_kwargs)])
+            DummyVecEnv([lambda: cfg.env_class(is_eval=False, **env_kwargs)])
         )
     else:
-        env_lam = lambda: cfg.env_class(**env_kwargs)
+        env_lam = lambda: cfg.env_class(is_eval=False, **env_kwargs)
     if cfg.n_proc_alg > 1:
         env = SubprocVecEnv([make_env(env_lam, i) for i in range(cfg.n_proc_alg)])
     else:
         env = env_lam()
     policy_kwargs = make_policy_kwargs(cfg)
+    alg_kwargs = {
+        "n_steps": cfg.n_steps,
+        "batch_size": cfg.batch_size,
+        "policy_kwargs": policy_kwargs,
+        "verbose": 0,
+        "learning_rate": cfg.learning_rate,
+        "device": cfg.device,
+    }
+    if cfg.alg != PPO:
+        del alg_kwargs["n_steps"]
+        # del alg_kwargs["batch_size"]
+        # del alg_kwargs["learning_rate"]
+        # alg_kwargs["n_episodes_rollout"] = 100
     model = cfg.alg(
         "CnnPolicy" if cfg.pixel_space else "MlpPolicy",
         env,
-        n_steps=cfg.n_steps,
-        batch_size=cfg.batch_size,
-        policy_kwargs=policy_kwargs,
-        verbose=0,
-        learning_rate=cfg.learning_rate,
-        device=cfg.device,
+        **alg_kwargs,
     )
     if cfg.init_model_path is not None:
         try:
@@ -214,6 +233,8 @@ def run_experiments(
 
 
 def patch_old_configs(cfg: Namespace) -> Namespace:
+    if not hasattr(cfg, "variant"):
+        cfg.variant = None
     if not hasattr(cfg, "init_model_path"):
         cfg.init_model_path = None
     if not hasattr(cfg, "env_shape"):
@@ -295,15 +316,18 @@ def collect_metrics(
     with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
     cfg = patch_old_configs(cfg)
-    env = cfg.env_class(is_eval=True, **make_env_kwargs(cfg))
+    # env = cfg.env_class(**make_env_kwargs(cfg), is_eval=True)
+    env_kwargs = {**make_env_kwargs(cfg), "is_eval": True, "single_step": False}
+    env = cfg.env_class(**env_kwargs)
     model = make_model(cfg)
     if model is None:
         print(f'Could not restore model "{cfg.init_model_path}"')
-        return None 
+        return None
     policy = model.policy
     try:
         policy.load_state_dict(torch.load(model_path))
-    except:
+    except Exception as e:
+        print(e)
         return None
     vectors = get_one_hot_vectors(model.policy)
     features_extractor = policy.features_extractor.cpu()
@@ -368,7 +392,6 @@ def aggregate_results(
     target_ts: Optional[int],
 ) -> None:
     paths = [x for p in path_strs for x in expand_paths(p, progression, target_ts)]
-    paths = paths[:30]
     jobs = [
         delayed(collect_metrics)(p, out_dir, discretize=d)
         # for d in (True, False)
