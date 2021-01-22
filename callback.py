@@ -100,8 +100,12 @@ class LoggingCallback(EventCallback):
             episode_lengths = []
             bn_activations = []
             # n_eval_episodes is the _actually_ the number of steps
+            # TODO Remove
+            # n_eval_episodes = 100
+            # results = evaluate_policy(self.model, self.eval_env.envs[0], n_eval_episodes=n_eval_episodes)
+            # print(f"{results[0]:+.2f} +- {1.96*results[1] / np.sqrt(n_eval_episodes):.2f}")
             while sum(episode_lengths) < self.n_eval_episodes:
-                ep_len, bns, success = util.eval_episode(
+                ep_len, bns, success, _traj = util.eval_episode(
                     self.model.policy,
                     self.model.policy.features_extractor,
                     self.eval_env.envs[0],

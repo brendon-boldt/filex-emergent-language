@@ -27,7 +27,7 @@ def get_metrics(o: np.ndarray) -> Dict[str, np.ndarray]:
     }
 
 
-def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float]:
+def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float, List]:
     obs = env.reset()
     done = False
     steps = 0
@@ -35,9 +35,10 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float]:
     original_bottlenck = policy.features_extractor.bottleneck
     if discretize:
         policy.features_extractor.bottleneck = partial(
-            torch.nn.functional.gumbel_softmax, tau=1e-20
+            torch.nn.functional.gumbel_softmax, hard=True
         )
     total_reward = 0.0
+    traj: List[List] = []
     while not done:
         obs_tensor = torch.Tensor(obs)
         with torch.no_grad():
@@ -51,7 +52,9 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float]:
                     act = policy_out.numpy()
             bn = fe.forward_bottleneck(obs_tensor).numpy()
         bns.append(bn)
+        prev_obs = obs
         obs, reward, done, info = env.step(act)
+        traj.append([steps, prev_obs, act, reward, obs, info['at_goal']])
         total_reward += reward
         steps += 1
     policy.features_extractor.bottleneck = original_bottlenck
@@ -59,4 +62,4 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float]:
         pass
     else:
         total_reward = float(info['at_goal'])
-    return steps, bns, total_reward
+    return steps, bns, total_reward, traj

@@ -4,7 +4,6 @@ import argparse
 from argparse import Namespace
 from pathlib import Path
 import pickle as pkl
-from functools import partial
 from itertools import chain
 import importlib
 import shutil
@@ -311,8 +310,10 @@ def get_lexicon_map(features_extractor: torch.nn.Module) -> None:
 
 
 def collect_metrics(
-    model_path: Path, out_path: Path, discretize
-) -> Optional[pd.DataFrame]:
+    model_path: Path,
+    out_path: Path,
+    discretize: bool,
+) -> Optional[Tuple[pd.DataFrame, List[List]]]:
     with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
     cfg = patch_old_configs(cfg)
@@ -334,14 +335,16 @@ def collect_metrics(
     bottleneck_values = []
     steps_values = []
     successes = 0.0
+    trajs: List[List] = []
     # get_lexicon_map(features_extractor)
     for ep in range(cfg_test.n_test_episodes):
-        ep_len, bns, success = util.eval_episode(
+        ep_len, bns, success, traj = util.eval_episode(
             policy, features_extractor, env, discretize
         )
         successes += success
         steps_values.append(ep_len)
         bottleneck_values.extend(bns)
+        trajs.extend(traj)
     np_bn_values = np.stack(bottleneck_values)
     entropies = util.get_metrics(np_bn_values)
     # print(entropies['fractional'])
@@ -359,7 +362,7 @@ def collect_metrics(
         "vectors": vectors.tolist(),
         **vars(cfg),
     }
-    return pd.DataFrame({k: [v] for k, v in contents.items()})
+    return pd.DataFrame({k: [v] for k, v in contents.items()}), trajs
 
 
 def expand_paths(
@@ -399,10 +402,27 @@ def aggregate_results(
         for p in paths
     ]
     # jobs[0][0](*jobs[0][1], **jobs[0][2])
-    results = Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs))
-    results = [r for r in results if r is not None]
-    df = pd.concat(results, ignore_index=True)
+    results = [
+        r for r in Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs)) if r is not None
+    ]
+    df_contents = [r[0] for r in results]
+    df = pd.concat(df_contents, ignore_index=True)
     df.to_csv(out_dir / "data.csv", index=False)
+    # traj.append([steps, prev_obs, act, reward, obs, info['at_goal']])
+    trajectories_dir = out_dir / "trajectories"
+    if not trajectories_dir.exists():
+        trajectories_dir.mkdir()
+    for vals, trajs in results:
+        select = lambda x: np.array([t[x] for t in trajs])
+        np.savez(
+            trajectories_dir / (vals['uuid'][0] + '.npz'),
+            t=select(0),
+            s=select(1),
+            a=select(2),
+            r=select(3),
+            s_next=select(4),
+            done=select(5),
+        )
 
 
 def optimality_test() -> None:

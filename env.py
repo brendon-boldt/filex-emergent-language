@@ -352,8 +352,9 @@ class Virtual(gym.Env):
         prev_vec = action - self.location
         # TODO Do we need to worry about cosine distance not checking magnitude?
         cosine_dist = cosine_distance(prev_vec, action)
+        reward_scale = 1.0 if self.variant == "unscaled" else 0.01
         if self.single_step:
-            reward = cosine_dist
+            reward = cosine_dist * reward_scale
             self.stop = self.num_steps > 0
             info["at_goal"] = reward
         elif self.is_eval:
@@ -363,9 +364,9 @@ class Virtual(gym.Env):
             info["at_goal"] = at_goal
             reward = 0.0
             if self.reward_structure in ("cosine", "cosine-only"):
-                reward += -0.01 * (2 - cosine_dist)
+                reward += (cosine_dist - 2) * reward_scale
             elif self.reward_structure == "constant":
-                reward += -0.01
+                reward += -reward_scale
             if self.stop:
                 if at_goal and self.reward_structure == "cosine":
                     reward += 1.0
