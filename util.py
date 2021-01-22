@@ -52,14 +52,14 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float, L
                     act = policy_out.numpy()
             bn = fe.forward_bottleneck(obs_tensor).numpy()
         bns.append(bn)
-        prev_obs = obs
+        prev_loc = env.location
         obs, reward, done, info = env.step(act)
-        traj.append([steps, prev_obs, act, reward, obs, info['at_goal']])
+        traj.append([steps, prev_loc.copy(), act, reward, env.location.copy(), info["at_goal"]])
         total_reward += reward
         steps += 1
     policy.features_extractor.bottleneck = original_bottlenck
     if hasattr(env, "use_reward") and not env.use_reward:
         pass
     else:
-        total_reward = float(info['at_goal'])
+        total_reward = float(info["at_goal"])
     return steps, bns, total_reward, traj
