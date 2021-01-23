@@ -71,6 +71,7 @@ _cfg = argparse.Namespace(
     world_radius=16.0,
     max_step_scale=3.0,
     variant=None,
+    entropy_coef=0.0,
 )
 
 cfg_test = Namespace(
@@ -115,6 +116,7 @@ def make_policy_kwargs(cfg: Namespace) -> gym.Env:
             "out_size": cfg.fe_out_size,
             "ratio": cfg.fe_out_ratio,
             "bottleneck": cfg.bottleneck,
+            "bottleneck_hard": cfg.bottleneck_hard,
             "pre_arch": cfg.pre_arch,
             "post_arch": cfg.post_arch,
             "temp": cfg.bottleneck_temperature,
@@ -144,6 +146,7 @@ def make_model(cfg: Namespace) -> Any:
         "verbose": 0,
         "learning_rate": cfg.learning_rate,
         "device": cfg.device,
+        "ent_coef": cfg.entropy_coef,
     }
     if cfg.alg != PPO:
         del alg_kwargs["n_steps"]
@@ -232,6 +235,10 @@ def run_experiments(
 
 
 def patch_old_configs(cfg: Namespace) -> Namespace:
+    if not hasattr(cfg, "bottleneck_hard"):
+        cfg.bottleneck_hard = False
+    if not hasattr(cfg, "entropy_coef"):
+        cfg.entropy_coef = 0.0
     if not hasattr(cfg, "variant"):
         cfg.variant = None
     if not hasattr(cfg, "init_model_path"):
@@ -317,7 +324,6 @@ def collect_metrics(
     with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
     cfg = patch_old_configs(cfg)
-    # env = cfg.env_class(**make_env_kwargs(cfg), is_eval=True)
     env_kwargs = {**make_env_kwargs(cfg), "is_eval": True, "single_step": False}
     env = cfg.env_class(**env_kwargs)
     model = make_model(cfg)
@@ -415,7 +421,7 @@ def aggregate_results(
     for vals, trajs in results:
         select = lambda x: np.array([t[x] for t in trajs])
         np.savez(
-            trajectories_dir / (vals['uuid'][0] + '.npz'),
+            trajectories_dir / (vals["uuid"][0] + ".npz"),
             t=select(0),
             s=select(1),
             a=select(2),

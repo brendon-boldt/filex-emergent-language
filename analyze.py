@@ -1,13 +1,16 @@
 import argparse
 import importlib
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Tuple, Iterator
 from itertools import product
 import math
 
-import pandas as pd  # type: ignore
+from matplotlib import colors as mpcolors  # type: ignore
+from matplotlib import image as mpimage  # type: ignore
 from matplotlib import pyplot as plt  # type: ignore
+import matplotlib  # type: ignore
 import numpy as np  # type: ignore
+import pandas as pd  # type: ignore
 
 
 def to_latex(df: pd.DataFrame) -> str:
@@ -32,7 +35,6 @@ def get_vector_clusters(vectors: np.ndarray, uses: np.ndarray) -> int:
             proximity_mat = (
                 np.abs(angs.reshape(-1, 1) - angs.reshape(1, -1)) < angle_thresh
             )
-            # mat = ~np.eye(i, dtype=bool) & proximity_mat
             return sum(not proximity_mat[j, j + 1 :].any() for j in range(i))
     return len(vectors)
 
@@ -43,36 +45,55 @@ def add_cluster_number(df: pd.DataFrame) -> None:
         vecs = df.iloc[i]["vectors"]
         uses = df.iloc[i]["usages"]
         n = get_vector_clusters(np.array(eval(vecs)), np.array(eval(uses)))
-        # df.iloc[i]["clusters"] = clusters
         clusters.append(n)
     df["clusters"] = clusters
 
 
-# def make_angle_plot(vectors: np.ndarray, usages: np.ndarray)
-def make_snowflake_plot(
-    df: pd.DataFrame, groups: List[str], path: Path, variant: Optional[str] = None
-) -> None:
-    if not path.exists():
-        path.mkdir()
-    path = path / "snowflake"
-    if not path.exists():
-        path.mkdir()
+def iter_groups(
+    df: pd.DataFrame, groups: List[str], plot_shape: Optional[Tuple[int, int]]
+) -> Iterator[Tuple[List, pd.DataFrame, matplotlib.axes.Axes]]:
     valss = product(*(df[groups[i]].unique() for i in range(len(groups))))
     for vals in valss:
         filtered = df.loc[(df[groups] == vals).all(1)]
-        filtered = filtered[:9]
         if not len(filtered):
             continue
-        if variant == "columns":
-            plot_shape = (4, 2)
+        if plot_shape is not None:
+            filtered = filtered[: plot_shape[0] * plot_shape[1]]
             random_idxs = np.random.default_rng().choice(
-                len(filtered), np.prod(plot_shape)
+                len(filtered),
+                np.prod(plot_shape),
+                replace=False,
             )
             filtered = filtered.iloc[random_idxs]
-            fig, axes = plt.subplots(*plot_shape, figsize=tuple(reversed(plot_shape)))
+            figsize = 4 * plot_shape[1], 4 * plot_shape[0]
         else:
             row_len = math.ceil(math.sqrt(len(filtered)))
-            fig, axes = plt.subplots(row_len, row_len, figsize=(8, 8))
+            plot_shape = row_len, row_len
+            figsize = (8, 8)
+        fig, axes = plt.subplots(*plot_shape, figsize=figsize)
+        plt.subplots_adjust(
+            left=0,
+            right=1.0,
+            top=1,
+            bottom=0,
+            wspace=0,
+            hspace=0,
+        )
+        yield vals, filtered, axes
+
+
+def make_snowflake_plot(
+    df: pd.DataFrame,
+    groups: List[str],
+    path: Path,
+    plot_shape: Optional[Tuple[int, int]] = None,
+) -> None:
+    if not path.exists():
+        path.mkdir()
+    path = path / "starfish"
+    if not path.exists():
+        path.mkdir()
+    for vals, filtered, axes in iter_groups(df, groups, plot_shape):
         for axis, row in zip(axes.reshape(-1), filtered.itertuples()):
             axis.axis("off")
             axis.set_xlim(-1.1, 1.1)
@@ -82,21 +103,22 @@ def make_snowflake_plot(
             clusters = get_vector_clusters(vectors, uses)
             # axis.set_title(f"{clusters:.2f}")
             # axis.set_title(f"{row.fractional:.2f} - {clusters} - {row.steps:.1f}")
-            if variant != "columns":
-                pass
-                # axis.set_title(f"{row.fractional:.2f} - {row.steps:.1f}")
             for vector, use in zip(vectors, uses):
                 norm = (vector ** 2).sum() ** 0.5
-                vector /= max(norm, 1.)
+                vector /= max(norm, 1.0)
                 axis.plot(
-                    [0, vector[0]], [0, vector[1]], color="blue", alpha=use / max(uses)
+                    [0, vector[0]],
+                    [0, vector[1]],
+                    color="blue",
+                    alpha=use / max(uses),
+                    linewidth=8,
+                    solid_capstyle="round",
                 )
-        name = "angle_summary_" + "_".join(str(v).replace(".", ",") for v in vals)
+        name = "lexmap_" + "_".join(str(v).replace(".", ",") for v in vals)
         plt.savefig(path / name)
         plt.close()
 
 
-# def make_angle_plot(vectors: np.ndarray, usages: np.ndarray)
 def make_lexicon_plot(df: pd.DataFrame, groups: List[str], path: Path) -> None:
     if not path.exists():
         path.mkdir()
@@ -130,6 +152,58 @@ def make_lexicon_plot(df: pd.DataFrame, groups: List[str], path: Path) -> None:
             name = "_".join(str(v).replace(".", ",") for v in vals) + f"_{row.Index}"
             plt.savefig(vis_path / name)
             plt.close()
+
+
+def wasserstein_distance(x, p=1) -> np.ndarray:
+    # https://www.stat.cmu.edu/~larry/=sml/Opt.pdf
+    x = np.sort(x)
+    y = np.arange(len(x)) / len(x) * 2 * np.pi - np.pi
+    return (np.abs(x - y) ** p).mean() ** (1 / p)
+
+
+def add_wasserstein_distance(df: pd.DataFrame, path: Path) -> None:
+    df["wd"] = np.nan
+    for idx, row in df.iterrows():
+        traj = np.load(path / "trajectories" / (row["uuid"] + ".npz"))
+        locs = traj["s"]
+        ts = traj["t"]
+        angles = np.arctan2(locs[:, 0], locs[:, 1])
+        angles = angles[ts > 5]
+        df.loc[idx, "wd"] = wasserstein_distance(angles) / (2 * np.pi)
+
+
+def make_heatmaps(
+    df: pd.DataFrame, groups: List[str], path: Path, plot_shape: Tuple[int, int] = None
+) -> None:
+    for group, filtered, axes in iter_groups(df, groups, plot_shape):
+        for axis, (_, row) in zip(axes.reshape(-1), filtered.iterrows()):
+            axis.axis("off")
+            # axis.set_title(f"{clusters:.2f}")
+
+            traj = np.load(path / "trajectories" / (row["uuid"] + ".npz"))
+            locs = traj["s"]
+            ts = traj["t"]
+            norms = (locs ** 2).sum(-1) ** 0.5
+
+            resolution = 0x200
+            disc_locs = ((locs + 1) / 2 * resolution).round().astype(np.int32)
+            disc_locs = resolution * disc_locs[:, 1] + disc_locs[:, 0]
+            counts = np.bincount(disc_locs, minlength=resolution ** 2).reshape(
+                resolution, resolution
+            )
+            # scale_factor = np.sort(counts.reshape(-1))[int(0.995 * resolution ** 2)]
+            scale_factor = counts.mean() * 5
+            counts = (1 * counts / scale_factor).clip(0, 1)
+            invertd_color_list = (1 - np.array(plt.cm.inferno.colors)).tolist()
+            cmap = mpcolors.ListedColormap(invertd_color_list)
+            im = axis.imshow(counts, interpolation="bicubic", cmap=cmap)
+
+        name = "heatmap_" + "_".join(str(v).replace(".", ",") for v in group)
+        fig_dir = path / "heatmaps"
+        if not fig_dir.exists():
+            fig_dir.mkdir()
+        plt.savefig(fig_dir / name)
+        plt.close()
 
 
 def get_args() -> argparse.Namespace:

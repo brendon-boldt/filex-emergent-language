@@ -35,7 +35,9 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float, L
     original_bottlenck = policy.features_extractor.bottleneck
     if discretize:
         policy.features_extractor.bottleneck = partial(
-            torch.nn.functional.gumbel_softmax, hard=True
+            torch.nn.functional.gumbel_softmax,
+            hard=True,
+            tau=1e-20,
         )
     total_reward = 0.0
     traj: List[List] = []
@@ -54,7 +56,9 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float, L
         bns.append(bn)
         prev_loc = env.location
         obs, reward, done, info = env.step(act)
-        traj.append([steps, prev_loc.copy(), act, reward, env.location.copy(), info["at_goal"]])
+        traj.append(
+            [steps, prev_loc.copy(), act, reward, env.location.copy(), info["at_goal"]]
+        )
         total_reward += reward
         steps += 1
     policy.features_extractor.bottleneck = original_bottlenck

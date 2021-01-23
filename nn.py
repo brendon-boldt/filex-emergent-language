@@ -20,14 +20,15 @@ class BottleneckPolicy(nn.Module):
         pre_arch: List[int],
         post_arch: List[int],
         temp: float,
+        bottleneck_hard: bool,
         act: str,
         **kwargs,
     ) -> None:
         super(self.__class__, self).__init__()
 
-        if act == 'tanh':
+        if act == "tanh":
             activation: nn.Module = nn.Tanh()
-        elif act == 'relu':
+        elif act == "relu":
             activation = nn.ReLU()
         else:
             raise ValueError(f'Activation "{act}" not recognized.')
@@ -43,13 +44,17 @@ class BottleneckPolicy(nn.Module):
         self.pre_net = nn.Sequential(*pre_layers)
 
         self.temp = temp
+        self.bottleneck_hard = bottleneck_hard
         if bottleneck == "none":
             self.bottleneck: Callable = torch.sigmoid
         elif bottleneck in ("sm", "softmax"):
             self.bottleneck = lambda x: nn.functional.softmax(x / self.temp, dim=-1)
         elif bottleneck in ("gsm", "gumbel-softmax"):
             self.bottleneck = partial(
-                nn.functional.gumbel_softmax, tau=self.temp, dim=-1
+                nn.functional.gumbel_softmax,
+                tau=self.temp,
+                hard=self.bottleneck_hard,
+                dim=-1,
             )
 
         post_arch = [x for x in post_arch]
