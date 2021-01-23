@@ -33,9 +33,6 @@ import util
 _cfg = argparse.Namespace(
     env_class=E.Virtual,
     env_shape="circle",  # square, circle
-    env_lsize=8,
-    action_scale=2 ** 4,
-    discrete_action=False,
     bottleneck="gsm",
     bottleneck_temperature=1.0,
     # reward_structure="proximity",  # constant, none, proximity, constant-only
@@ -43,19 +40,14 @@ _cfg = argparse.Namespace(
     pre_arch=[0x20, 0x20],
     post_arch=[0x20],
     policy_activation="tanh",
-    action_noise=0.0,
     # obs_type="direction",  # vector, direction
-    entropy_samples=400,
     eval_freq=20_000,
     total_timesteps=500_000,
-    reward_threshold=0.95,
     # max_step_scale=4.5,  # default: 2.5
     eval_steps=500 * 12,  # 12 is approx the average ep len of a converged model
     fe_out_size=0x10,
     fe_out_ratio=4,
-    pixel_space=False,
     device="cpu",
-    n_proc_alg=1,
     alg=PPO,
     n_steps=0x400,  # Was 0x80
     batch_size=0x100,  # Was 0x100
@@ -98,20 +90,14 @@ def make_env_kwargs(cfg: Namespace) -> gym.Env:
         "obs_type": cfg.obs_type,
         "action_noise": cfg.action_noise,
         "reward_structure": cfg.reward_structure,
-        "discrete_action": cfg.discrete_action,
-        "pixel_space": cfg.pixel_space,
-        "lsize": cfg.env_lsize,
         "single_step": cfg.single_step,
-        "action_scale": cfg.action_scale,
         "max_step_scale": cfg.max_step_scale,
     }
 
 
 def make_policy_kwargs(cfg: Namespace) -> gym.Env:
     return {
-        "features_extractor_class": nn.ScalableCnn
-        if cfg.pixel_space
-        else nn.BottleneckPolicy,
+        "features_extractor_class": nn.BottleneckPolicy,
         "features_extractor_kwargs": {
             "out_size": cfg.fe_out_size,
             "ratio": cfg.fe_out_ratio,
@@ -128,16 +114,7 @@ def make_policy_kwargs(cfg: Namespace) -> gym.Env:
 
 def make_model(cfg: Namespace) -> Any:
     env_kwargs = make_env_kwargs(cfg)
-    if cfg.pixel_space:
-        env_lam: Callable = lambda: VecTransposeImage(
-            DummyVecEnv([lambda: cfg.env_class(is_eval=False, **env_kwargs)])
-        )
-    else:
-        env_lam = lambda: cfg.env_class(is_eval=False, **env_kwargs)
-    if cfg.n_proc_alg > 1:
-        env = SubprocVecEnv([make_env(env_lam, i) for i in range(cfg.n_proc_alg)])
-    else:
-        env = env_lam()
+    env = cfg.env_class(is_eval=False, **env_kwargs)
     policy_kwargs = make_policy_kwargs(cfg)
     alg_kwargs = {
         "n_steps": cfg.n_steps,
@@ -154,7 +131,7 @@ def make_model(cfg: Namespace) -> Any:
         # del alg_kwargs["learning_rate"]
         # alg_kwargs["n_episodes_rollout"] = 100
     model = cfg.alg(
-        "CnnPolicy" if cfg.pixel_space else "MlpPolicy",
+        "MlpPolicy",
         env,
         **alg_kwargs,
     )
@@ -178,19 +155,13 @@ def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     with (log_dir / "config.pkl").open("wb") as binary_fo:
         pkl.dump(cfg, binary_fo)
     env_kwargs = make_env_kwargs(cfg)
-    if cfg.pixel_space:
-        env_eval: Any = VecTransposeImage(
-            DummyVecEnv([lambda: cfg.env_class(is_eval=True, **env_kwargs)])
-        )
-    else:
-        env_eval = DummyVecEnv([lambda: cfg.env_class(is_eval=True, **env_kwargs)])
+    env_eval = DummyVecEnv([lambda: cfg.env_class(is_eval=True, **env_kwargs)])
     logging_callback = LoggingCallback(
         eval_env=env_eval,
         n_eval_episodes=cfg.eval_steps,
         eval_freq=cfg.eval_freq,
         writer=writer,
         verbose=0,
-        entropy_samples=cfg.entropy_samples,
         save_all_checkpoints=cfg.save_all_checkpoints,
     )
     model = make_model(cfg)
@@ -243,22 +214,6 @@ def patch_old_configs(cfg: Namespace) -> Namespace:
         cfg.variant = None
     if not hasattr(cfg, "init_model_path"):
         cfg.init_model_path = None
-    if not hasattr(cfg, "env_shape"):
-        cfg.obs_type = "square"
-    if not hasattr(cfg, "obs_type"):
-        cfg.obs_type = "vector"
-    if not hasattr(cfg, "policy_activation"):
-        cfg.policy_activation = "tanh"
-    if not hasattr(cfg, "bottleneck_temperature"):
-        cfg.action_noise = 0.0
-    if not hasattr(cfg, "bottleneck_temperature"):
-        cfg.bottleneck_temperature = 1.0
-    if not hasattr(cfg, "reward_structure"):
-        cfg.reward_structure = "proximity"
-    if not hasattr(cfg, "n_proc_alg"):
-        cfg.n_proc_alg = 1
-    if not hasattr(cfg, "discrete_action"):
-        cfg.discrete_action = False
     return cfg
 
 
@@ -287,7 +242,6 @@ def get_lexicon_map(features_extractor: torch.nn.Module) -> None:
     n_divs = 40
     m = np.zeros([n_divs + 1] * 2, dtype=np.int64)
     bound = 1.0
-    # bound = 0.2
     print()
     print()
     for i in range(n_divs + 1):
@@ -342,7 +296,6 @@ def collect_metrics(
     steps_values = []
     successes = 0.0
     trajs: List[List] = []
-    # get_lexicon_map(features_extractor)
     for ep in range(cfg_test.n_test_episodes):
         ep_len, bns, success, traj = util.eval_episode(
             policy, features_extractor, env, discretize
@@ -353,9 +306,6 @@ def collect_metrics(
         trajs.extend(traj)
     np_bn_values = np.stack(bottleneck_values)
     entropies = util.get_metrics(np_bn_values)
-    # print(entropies['fractional'])
-    # print()
-    # print()
     sample_id = str(uuid.uuid4())
     contents = {
         "path": str(model_path),
@@ -407,14 +357,12 @@ def aggregate_results(
         for d in (True,)
         for p in paths
     ]
-    # jobs[0][0](*jobs[0][1], **jobs[0][2])
     results = [
         r for r in Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs)) if r is not None
     ]
     df_contents = [r[0] for r in results]
     df = pd.concat(df_contents, ignore_index=True)
     df.to_csv(out_dir / "data.csv", index=False)
-    # traj.append([steps, prev_obs, act, reward, obs, info['at_goal']])
     trajectories_dir = out_dir / "trajectories"
     if not trajectories_dir.exists():
         trajectories_dir.mkdir()
@@ -429,34 +377,6 @@ def aggregate_results(
             s_next=select(4),
             done=select(5),
         )
-
-
-def optimality_test() -> None:
-    cfg = _cfg
-    env_kwargs = make_env_kwargs(cfg)
-    env = E.Scalable(is_eval=True, **env_kwargs)
-    rng = np.random.default_rng()
-    n_epochs = 1000
-    for n_divs in [3, 4, 5, 6, 7, 8, 12, 16, 32]:
-        stepss = []
-        for _ in range(n_epochs):
-            sep_angle = 2 * np.pi / n_divs
-            base_angle = rng.uniform(sep_angle)
-            angles = np.array([base_angle + i * sep_angle for i in range(n_divs)])
-            vecs = np.array([[np.cos(a), np.sin(a)] for a in angles])
-            obs = env.reset()
-            done = False
-            steps = 0
-            while not done and steps < 100:
-                dists = ((obs - vecs) ** 2).sum(-1)
-                act = vecs[dists.argsort()[0]]
-                obs, _, done, info = env.step(act)
-                steps += 1
-            stepss.append(steps)
-        step_arr = np.array(stepss)
-        mean = step_arr.mean()
-        stderr = step_arr.std() / np.sqrt(n_epochs)
-        print(f"{n_divs:>2d}: {mean:.1f} +- {2*stderr:.2f}")
 
 
 def get_args() -> argparse.Namespace:
@@ -481,8 +401,6 @@ def main() -> None:
         )
     elif args.command == "run":
         run_experiments(args.targets, args.num_trials, args.j)
-    elif args.command == "optimal":
-        optimality_test()
     else:
         raise ValueError(f"Command '{args.command}' not recognized.")
 

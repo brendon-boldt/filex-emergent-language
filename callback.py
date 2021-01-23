@@ -49,7 +49,6 @@ class LoggingCallback(EventCallback):
         deterministic: bool = True,
         render: bool = False,
         verbose: int = 1,
-        entropy_samples: int = 0,
         save_all_checkpoints: bool = False,
     ) -> None:
         super(self.__class__, self).__init__(callback_on_new_best, verbose=verbose)
@@ -60,7 +59,6 @@ class LoggingCallback(EventCallback):
         self.deterministic = deterministic
         self.render = render
         self.writer = writer
-        self.entropy_samples = entropy_samples
         self.save_all_checkpoints = save_all_checkpoints
 
         # Convert to VecEnv for consistency
@@ -100,10 +98,6 @@ class LoggingCallback(EventCallback):
             episode_lengths = []
             bn_activations = []
             # n_eval_episodes is the _actually_ the number of steps
-            # TODO Remove
-            # n_eval_episodes = 100
-            # results = evaluate_policy(self.model, self.eval_env.envs[0], n_eval_episodes=n_eval_episodes)
-            # print(f"{results[0]:+.2f} +- {1.96*results[1] / np.sqrt(n_eval_episodes):.2f}")
             while sum(episode_lengths) < self.n_eval_episodes:
                 ep_len, bns, success, _traj = util.eval_episode(
                     self.model.policy,
@@ -120,15 +114,6 @@ class LoggingCallback(EventCallback):
             self.writer.add_scalar(
                 "entropy/argmax", entropies["argmax"], self.num_timesteps
             )
-            # self.writer.add_scalar(
-            #     "entropy/frac", entropies["fractional"], self.num_timesteps
-            # )
-            # self.writer.add_scalar(
-            #     "entropy/indiv", entropies["individual"], self.num_timesteps
-            # )
-            # self.writer.add_scalar(
-            #     "entropy/linf", entropies["linf"], self.num_timesteps
-            # )
 
             if self.log_path is not None:
                 self.evaluations_timesteps.append(self.num_timesteps)
@@ -165,20 +150,6 @@ class LoggingCallback(EventCallback):
             )
             self.writer.add_scalar("mean_ep_length", mean_ep_length, self.num_timesteps)
             self.writer.add_scalar("rate", self.num_timesteps, self.num_timesteps)
-
-            if self.entropy_samples > 0 and self.model and self.model.policy:
-                _outps = []
-                for _ in range(self.entropy_samples):
-                    obs = torch.FloatTensor(self.eval_env.reset()).to(
-                        self.model.policy.device
-                    )
-                    _outps.append(
-                        self.model.policy.features_extractor.forward_bottleneck(obs)
-                        .detach()
-                        .cpu()
-                        .numpy()
-                    )
-                outps = np.array(_outps).squeeze(1)
 
             if self.save_all_checkpoints or (self.num_timesteps % 100_000) == 0:
                 torch.save(
