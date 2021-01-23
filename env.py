@@ -17,24 +17,6 @@ def cosine_distance(x, y) -> float:
     return (x * y).sum() / max(get_norm(x) * get_norm(y), 1e-5)
 
 
-# Spirals outward
-DISCRETE_ACT_DICT = {
-    0: [0, 0],
-    1: [1, 0],
-    2: [0, 1],
-    3: [-1, 0],
-    4: [0, -1],
-    5: [1, 1],
-    6: [-1, 1],
-    7: [-1, -1],
-    8: [1, -1],
-    9: [2, 0],
-    10: [0, 2],
-    11: [-2, 0],
-    12: [0, -2],
-}
-
-
 class Supervised(gym.Env):
     # TODO Randomize
     angle_offset = np.pi / 4.0

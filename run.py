@@ -35,6 +35,7 @@ _cfg = argparse.Namespace(
     env_shape="circle",  # square, circle
     bottleneck="gsm",
     bottleneck_temperature=1.0,
+    bottleneck_hard=False,
     # reward_structure="proximity",  # constant, none, proximity, constant-only
     policy_net_arch=[0x40] * 0,  # default: [0x40] * 2,
     pre_arch=[0x20, 0x20],
@@ -88,7 +89,6 @@ def make_env_kwargs(cfg: Namespace) -> gym.Env:
         "world_radius": cfg.world_radius,
         "env_shape": cfg.env_shape,
         "obs_type": cfg.obs_type,
-        "action_noise": cfg.action_noise,
         "reward_structure": cfg.reward_structure,
         "single_step": cfg.single_step,
         "max_step_scale": cfg.max_step_scale,
