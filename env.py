@@ -111,7 +111,7 @@ class Virtual(gym.Env):
             print(action.shape)
             raise e
         act_norm = get_norm(action)
-        if get_norm(action) > 1:
+        if act_norm > 1:
             action /= act_norm
         action /= self.world_radius
         self.location += action

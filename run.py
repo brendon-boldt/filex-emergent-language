@@ -68,7 +68,7 @@ _cfg = argparse.Namespace(
 )
 
 cfg_test = Namespace(
-    n_test_episodes=1000,
+    n_eval_steps=10_000,
 )
 
 
@@ -296,10 +296,14 @@ def collect_metrics(
     steps_values = []
     successes = 0.0
     trajs: List[List] = []
-    for ep in range(cfg_test.n_test_episodes):
+    n_episodes = 0
+    n_steps = 0
+    while n_steps < cfg_test.n_eval_steps:
+        n_episodes += 1
         ep_len, bns, success, traj = util.eval_episode(
             policy, features_extractor, env, discretize
         )
+        n_steps += ep_len
         successes += success
         steps_values.append(ep_len)
         bottleneck_values.extend(bns)
@@ -311,7 +315,7 @@ def collect_metrics(
         "path": str(model_path),
         "uuid": sample_id,
         "steps": np.mean(steps_values),
-        "success_rate": successes / cfg_test.n_test_episodes,
+        "success_rate": successes / n_episodes,
         **entropies,
         "discretize": discretize,
         "usages": np_bn_values.mean(0).tolist(),

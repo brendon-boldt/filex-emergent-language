@@ -54,10 +54,10 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float, L
                     act = policy_out.numpy()
             bn = fe.forward_bottleneck(obs_tensor).numpy()
         bns.append(bn)
-        prev_loc = env.location
+        prev_loc = env.location.copy()
         obs, reward, done, info = env.step(act)
         traj.append(
-            [steps, prev_loc.copy(), act, reward, env.location.copy(), info["at_goal"]]
+            [steps, prev_loc, act, reward, env.location.copy(), info["at_goal"]]
         )
         total_reward += reward
         steps += 1

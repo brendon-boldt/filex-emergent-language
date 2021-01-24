@@ -168,7 +168,6 @@ def add_wasserstein_distance(df: pd.DataFrame, path: Path) -> None:
         locs = traj["s"]
         ts = traj["t"]
         angles = np.arctan2(locs[:, 0], locs[:, 1])
-        angles = angles[ts > 5]
         df.loc[idx, "wd"] = wasserstein_distance(angles) / (2 * np.pi)
 
 
@@ -183,10 +182,16 @@ def make_heatmaps(
             traj = np.load(path / "trajectories" / (row["uuid"] + ".npz"))
             locs = traj["s"]
             ts = traj["t"]
-            norms = (locs ** 2).sum(-1) ** 0.5
+            angles = np.arctan2(locs[:, 0], locs[:, 1])
+            # print(group)
+            # for i in range(ts.max()):
+            #     if (ts == i).sum() < 100:
+            #         break
+            #     print(wasserstein_distance(angles[ts == i]))
+            # breakpoint()
 
             resolution = 0x200
-            disc_locs = ((locs + 1) / 2 * resolution).round().astype(np.int32)
+            disc_locs = ((locs + 1) / 2 * resolution).astype(np.int32)
             disc_locs = resolution * disc_locs[:, 1] + disc_locs[:, 0]
             counts = np.bincount(disc_locs, minlength=resolution ** 2).reshape(
                 resolution, resolution
