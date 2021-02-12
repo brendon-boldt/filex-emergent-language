@@ -1,6 +1,7 @@
 from typing import Union
 import os
 import warnings
+import argparse
 
 import torch
 import gym  # type: ignore
@@ -41,6 +42,7 @@ class LoggingCallback(EventCallback):
         self,
         eval_env: Union[gym.Env, VecEnv],
         writer: SummaryWriter,
+        cfg: argparse.Namespace,
         rolling_mean_samples=10,
         callback_on_new_best: Optional[BaseCallback] = None,
         n_eval_episodes: int = 5,
@@ -60,6 +62,7 @@ class LoggingCallback(EventCallback):
         self.render = render
         self.writer = writer
         self.save_all_checkpoints = save_all_checkpoints
+        self.cfg = cfg
 
         # Convert to VecEnv for consistency
         if not isinstance(eval_env, VecEnv):
@@ -103,7 +106,7 @@ class LoggingCallback(EventCallback):
                     self.model.policy,
                     self.model.policy.features_extractor,
                     self.eval_env.envs[0],
-                    True,
+                    self.cfg != "none",
                 )
                 episode_rewards.append(success)
                 episode_lengths.append(ep_len)

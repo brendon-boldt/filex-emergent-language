@@ -61,7 +61,7 @@ def iter_groups(
             filtered = filtered[: plot_shape[0] * plot_shape[1]]
             random_idxs = np.random.default_rng().choice(
                 len(filtered),
-                np.prod(plot_shape),
+                min(len(filtered), np.prod(plot_shape)),
                 replace=False,
             )
             filtered = filtered.iloc[random_idxs]

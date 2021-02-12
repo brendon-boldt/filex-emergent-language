@@ -13,7 +13,7 @@ def get_norm(x):
     return np.sqrt((x ** 2).sum(-1))
 
 
-def cosine_distance(x, y) -> float:
+def cosine_similarity(x, y) -> float:
     return (x * y).sum() / max(get_norm(x) * get_norm(y), 1e-5)
 
 
@@ -42,7 +42,7 @@ class Supervised(gym.Env):
 
     def step(self, action: np.ndarray) -> StepResult:
         if False or self.is_eval:
-            reward = cosine_distance(action, self.target_vector)
+            reward = cosine_similarity(action, self.target_vector)
         else:
             reward = -((action - self.target_vector) ** 2).sum() / 10
         return self.target_vector, reward, True, {"at_goal": True}
@@ -86,7 +86,7 @@ class Virtual(gym.Env):
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
 
         # assert reward_structure in ("proximity", "none", "constant", "constant-only")
-        assert reward_structure in ("cosine", "cosine-only", "constant")
+        assert reward_structure in ("cosine", "cosine-only", "constant", "euclidean")
         self.reward_structure = reward_structure
 
         # assert obs_type in ("vector", "direction")
@@ -134,10 +134,17 @@ class Virtual(gym.Env):
 
         prev_vec = action - self.location
         # TODO Do we need to worry about cosine distance not checking magnitude?
-        cosine_dist = cosine_distance(prev_vec, action)
+        cosine_sim = cosine_similarity(prev_vec, action)
         reward_scale = 1.0 if self.variant == "unscaled" else 0.01
         if self.single_step:
-            reward = cosine_dist * reward_scale
+            if self.reward_structure == "euclidean":
+                reward = -get_norm(
+                    prev_vec / get_norm(prev_vec) - action * self.world_radius
+                )
+            else:
+                reward = cosine_sim
+            if not self.is_eval:
+                reward *= reward_scale
             self.stop = self.num_steps > 0
             info["at_goal"] = reward
         elif self.is_eval:
@@ -147,7 +154,11 @@ class Virtual(gym.Env):
             info["at_goal"] = at_goal
             reward = 0.0
             if self.reward_structure in ("cosine", "cosine-only"):
-                reward += (cosine_dist - 2) * reward_scale
+                reward += (cosine_sim - 2) * reward_scale
+            elif self.reward_structure == "euclidean":
+                reward = -reward_scale * get_norm(
+                    prev_vec / get_norm(prev_vec) - action * self.world_radius
+                )
             elif self.reward_structure == "constant":
                 reward += -reward_scale
             if self.stop:

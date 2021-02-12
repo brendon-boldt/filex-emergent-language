@@ -62,9 +62,11 @@ _cfg = argparse.Namespace(
     single_step=False,
     goal_radius=1.0,
     world_radius=16.0,
+    # TODO Rename this since it is confusing
     max_step_scale=3.0,
     variant=None,
     entropy_coef=0.0,
+    gamma=0.99,
 )
 
 cfg_test = Namespace(
@@ -124,6 +126,7 @@ def make_model(cfg: Namespace) -> Any:
         "learning_rate": cfg.learning_rate,
         "device": cfg.device,
         "ent_coef": cfg.entropy_coef,
+        "gamma": cfg.gamma,
     }
     if cfg.alg != PPO:
         del alg_kwargs["n_steps"]
@@ -163,6 +166,7 @@ def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         writer=writer,
         verbose=0,
         save_all_checkpoints=cfg.save_all_checkpoints,
+        cfg=cfg,
     )
     model = make_model(cfg)
     if model is None:
@@ -206,6 +210,8 @@ def run_experiments(
 
 
 def patch_old_configs(cfg: Namespace) -> Namespace:
+    if not hasattr(cfg, "gamma"):
+        cfg.gamma = 0.99
     if not hasattr(cfg, "bottleneck_hard"):
         cfg.bottleneck_hard = False
     if not hasattr(cfg, "entropy_coef"):
@@ -273,7 +279,7 @@ def get_lexicon_map(features_extractor: torch.nn.Module) -> None:
 def collect_metrics(
     model_path: Path,
     out_path: Path,
-    discretize: bool,
+    eval_steps: int,
 ) -> Optional[Tuple[pd.DataFrame, List[List]]]:
     with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
@@ -298,7 +304,8 @@ def collect_metrics(
     trajs: List[List] = []
     n_episodes = 0
     n_steps = 0
-    while n_steps < cfg_test.n_eval_steps:
+    discretize = cfg.bottleneck != "none"
+    while n_steps < eval_steps:
         n_episodes += 1
         ep_len, bns, success, traj = util.eval_episode(
             policy, features_extractor, env, discretize
@@ -353,14 +360,12 @@ def aggregate_results(
     n_jobs: int,
     progression: bool,
     target_ts: Optional[int],
+    eval_steps: int,
 ) -> None:
+    if not out_dir.exists():
+        out_dir.mkdir()
     paths = [x for p in path_strs for x in expand_paths(p, progression, target_ts)]
-    jobs = [
-        delayed(collect_metrics)(p, out_dir, discretize=d)
-        # for d in (True, False)
-        for d in (True,)
-        for p in paths
-    ]
+    jobs = [delayed(collect_metrics)(p, out_dir, eval_steps) for p in paths]
     results = [
         r for r in Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs)) if r is not None
     ]
@@ -391,6 +396,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--out_dir", "-o", type=str, default=".")
     parser.add_argument("--progression", action="store_true")
     parser.add_argument("--target_ts", type=int, default=None)
+    parser.add_argument("--eval_steps", type=int, default=10_000)
     parser.add_argument("-j", type=int, default=1)
     return parser.parse_args()
 
@@ -401,7 +407,12 @@ def main() -> None:
 
     if args.command == "test":
         aggregate_results(
-            args.targets, args.out_dir, args.j, args.progression, args.target_ts
+            args.targets,
+            args.out_dir,
+            args.j,
+            args.progression,
+            args.target_ts,
+            args.eval_steps,
         )
     elif args.command == "run":
         run_experiments(args.targets, args.num_trials, args.j)
