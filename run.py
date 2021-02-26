@@ -11,7 +11,7 @@ import uuid
 
 import gym  # type: ignore
 from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
-from stable_baselines3.dqn import CnnPolicy  # type: ignore
+from stable_baselines3.common.policies import ActorCriticPolicy  # type: ignore
 from stable_baselines3.common.vec_env import (
     SubprocVecEnv,
     VecTransposeImage,
@@ -55,6 +55,7 @@ _cfg = argparse.Namespace(
     # single_step=False,
     save_all_checkpoints=False,
     init_model_path=None,
+    freeze_agent=None,
     # Virtual args
     reward_structure="cosine",
     obs_type="direction",
@@ -96,6 +97,33 @@ def make_env_kwargs(cfg: Namespace) -> gym.Env:
     }
 
 
+class PartialPolicy(ActorCriticPolicy):
+    def __init__(self, *args, **kwargs):
+        self.freeze_agent = kwargs.get("freeze_agent", None)
+        del kwargs["freeze_agent"]
+        super().__init__(*args, **kwargs)
+
+    def _build(self, lr_schedule: Any) -> None:
+        super()._build(lr_schedule)
+        assert self.features_extractor is not None
+        if self.freeze_agent == "sender":
+            assert isinstance(self.features_extractor.post_net, torch.nn.Module)
+            parameters: Iterator[torch.Tensor] = chain(
+                self.features_extractor.post_net.parameters(),
+                self.mlp_extractor.parameters(),
+                self.action_net.parameters(),
+                self.value_net.parameters(),
+            )
+        elif self.freeze_agent == "receiver":
+            assert isinstance(self.features_extractor.pre_net, torch.nn.Module)
+            parameters = self.features_extractor.pre_net.parameters()
+        else:
+            parameters = self.parameters()
+        self.optimizer = self.optimizer_class(  # type: ignore
+            parameters, lr=lr_schedule(1), **self.optimizer_kwargs
+        )
+
+
 def make_policy_kwargs(cfg: Namespace) -> gym.Env:
     return {
         "features_extractor_class": nn.BottleneckPolicy,
@@ -110,6 +138,7 @@ def make_policy_kwargs(cfg: Namespace) -> gym.Env:
             "act": cfg.policy_activation,
         },
         "net_arch": cfg.policy_net_arch,
+        "freeze_agent": cfg.freeze_agent,
     }
 
 
@@ -132,8 +161,9 @@ def make_model(cfg: Namespace) -> Any:
         # del alg_kwargs["batch_size"]
         # del alg_kwargs["learning_rate"]
         # alg_kwargs["n_episodes_rollout"] = 100
+
     model = cfg.alg(
-        "MlpPolicy",
+        PartialPolicy,
         env,
         **alg_kwargs,
     )
@@ -142,6 +172,26 @@ def make_model(cfg: Namespace) -> Any:
             model.policy.load_state_dict(torch.load(cfg.init_model_path))
         except:
             return None
+    if cfg.freeze_agent is not None:
+        alg_kwargs["policy_kwargs"]["features_extractor_kwargs"]["post_arch"] = [0x8]
+        fresh_model = cfg.alg(PartialPolicy, env, **alg_kwargs)
+        if cfg.freeze_agent == "sender":
+            fresh_model.policy.features_extractor.pre_net = (
+                model.policy.features_extractor.pre_net
+            )
+            model = fresh_model
+        elif cfg.freeze_agent == "receiver":
+            # model.policy.features_extractor.pre_net = (
+            #     fresh_model.policy.features_extractor.pre_net
+            # )
+            # model.policy.optmizer = fresh_model.policy.optimizer
+            fresh_model.policy.features_extractor.post_net = (
+                model.policy.features_extractor.post_net
+            )
+            fresh_model.policy.value_net = model.policy.value_net
+            fresh_model.policy.action_net = model.policy.action_net
+            fresh_model.policy.mlp_extractor = model.policy.mlp_extractor
+            fresh_model = model
     return model
 
 
@@ -209,6 +259,8 @@ def run_experiments(
 
 
 def patch_old_configs(cfg: Namespace) -> Namespace:
+    if not hasattr(cfg, "freeze_agent"):
+        cfg.freeze_agent = None
     if not hasattr(cfg, "gamma"):
         cfg.gamma = 0.99
     if not hasattr(cfg, "bottleneck_hard"):
