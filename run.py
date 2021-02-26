@@ -44,7 +44,6 @@ _cfg = argparse.Namespace(
     # obs_type="direction",  # vector, direction
     eval_freq=20_000,
     total_timesteps=500_000,
-    # max_step_scale=4.5,  # default: 2.5
     eval_steps=500 * 12,  # 12 is approx the average ep len of a converged model
     fe_out_size=0x10,
     fe_out_ratio=4,

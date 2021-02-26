@@ -89,8 +89,7 @@ class Virtual(gym.Env):
         assert reward_structure in ("cosine", "cosine-only", "constant", "euclidean")
         self.reward_structure = reward_structure
 
-        # assert obs_type in ("vector", "direction")
-        assert obs_type in ("direction",)
+        assert obs_type in ("vector", "direction")
         self.obs_type = obs_type
 
         # For type purposes
@@ -120,6 +119,8 @@ class Virtual(gym.Env):
         if self.obs_type == "direction":
             # Observation should never have norm 0 since it would be at the goal
             return -self.location / get_norm(self.location)
+        elif self.obs_type == "vector":
+            return -self.location
         else:
             raise NotImplementedError()
 
@@ -192,7 +193,7 @@ class Virtual(gym.Env):
         # Pulled from http://extremelearning.com.au/how-to-generate-uniformly-random-points-on-n-spheres-and-n-balls/
         u = rng.normal(0, 1, n_dim)
         norm = (u ** 2).sum() ** 0.5
-        if self.variant == "triangle-init":
+        if not self.is_eval and self.variant == "triangle-init":
             # https://en.wikipedia.org/wiki/Triangular_distribution
             a = self.goal_radius / self.world_radius
             c = a
