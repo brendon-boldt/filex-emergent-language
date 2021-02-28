@@ -11,6 +11,7 @@ from matplotlib import pyplot as plt  # type: ignore
 import matplotlib  # type: ignore
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
+from scipy.interpolate import CubicSpline
 
 
 def to_latex(df: pd.DataFrame) -> str:
@@ -170,6 +171,19 @@ def add_wasserstein_distance(df: pd.DataFrame, path: Path) -> None:
         angles = np.arctan2(locs[:, 0], locs[:, 1])
         df.loc[idx, "wd"] = wasserstein_distance(angles) / (2 * np.pi)
 
+def add_pareto_efficiency(df: pd.DataFrame) -> None:
+    df["pe"] = np.nan
+    opt_data = pd.read_csv('analysis/optimal.csv', header=None)
+    opt_data[0] = np.log2(opt_data[0])
+    perfs = np.array(opt_data[1])
+    opt_data = opt_data[np.concatenate([[True], perfs[:-1] < perfs[1:]])]
+    h2r = CubicSpline(opt_data[0], opt_data[1])
+    r2h = CubicSpline(opt_data[1], opt_data[0])
+    for idx, row in df.iterrows():
+        r_dist = np.abs(-row['steps'] - h2r(row['argmax']))
+        h_dist = np.abs(row['argmax'] - r2h(-row['steps']))
+        df.loc[idx, "pe"] = -np.sqrt(r_dist * h_dist)
+
 
 def make_heatmaps(
     df: pd.DataFrame, groups: List[str], path: Path, plot_shape: Tuple[int, int] = None
@@ -183,16 +197,11 @@ def make_heatmaps(
             locs = traj["s"]
             ts = traj["t"]
             angles = np.arctan2(locs[:, 0], locs[:, 1])
-            # print(group)
-            # for i in range(ts.max()):
-            #     if (ts == i).sum() < 100:
-            #         break
-            #     print(wasserstein_distance(angles[ts == i]))
-            # breakpoint()
 
             resolution = 0x200
             disc_locs = ((locs + 1) / 2 * resolution).astype(np.int32)
             disc_locs = resolution * disc_locs[:, 1] + disc_locs[:, 0]
+            disc_locs = disc_locs[(0 <= disc_locs) & (disc_locs < resolution ** 2)]
             counts = np.bincount(disc_locs, minlength=resolution ** 2).reshape(
                 resolution, resolution
             )

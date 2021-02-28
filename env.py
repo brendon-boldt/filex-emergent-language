@@ -136,6 +136,7 @@ class Virtual(gym.Env):
         prev_vec = action - self.location
         # TODO Do we need to worry about cosine distance not checking magnitude?
         cosine_sim = cosine_similarity(prev_vec, action)
+        # reward_scale = 1.0 if self.variant == "unscaled" else 0.001
         reward_scale = 1.0 if self.variant == "unscaled" else 0.01
         if self.single_step:
             if self.reward_structure == "euclidean":

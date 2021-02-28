@@ -11,7 +11,6 @@ import uuid
 
 import gym  # type: ignore
 from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
-from stable_baselines3.dqn import CnnPolicy  # type: ignore
 from stable_baselines3.common.vec_env import (
     SubprocVecEnv,
     VecTransposeImage,
@@ -24,53 +23,12 @@ from torch.utils.tensorboard import SummaryWriter
 from joblib import Parallel, delayed  # type: ignore
 from tqdm import tqdm  # type: ignore
 import pandas as pd  # type: ignore
+from scipy.interpolate import CubicSpline # type: ignore
 
-import env as E
 import nn
 from callback import LoggingCallback
 import util
-
-_cfg = argparse.Namespace(
-    env_class=E.Virtual,
-    env_shape="circle",  # square, circle
-    bottleneck="gsm",
-    bottleneck_temperature=1.0,
-    bottleneck_hard=False,
-    # reward_structure="proximity",  # constant, none, proximity, constant-only
-    policy_net_arch=[0x40] * 0,  # default: [0x40] * 2,
-    pre_arch=[0x20, 0x20],
-    post_arch=[0x20],
-    policy_activation="tanh",
-    # obs_type="direction",  # vector, direction
-    eval_freq=20_000,
-    total_timesteps=500_000,
-    eval_steps=500 * 12,  # 12 is approx the average ep len of a converged model
-    fe_out_size=0x10,
-    fe_out_ratio=4,
-    device="cpu",
-    alg=PPO,
-    n_steps=0x400,  # Was 0x80
-    batch_size=0x100,  # Was 0x100
-    learning_rate=3e-4,  # default: 3-e4
-    # single_step=False,
-    save_all_checkpoints=False,
-    init_model_path=None,
-    # Virtual args
-    reward_structure="cosine",
-    obs_type="direction",
-    single_step=False,
-    goal_radius=1.0,
-    world_radius=16.0,
-    # TODO Rename this since it is confusing
-    max_step_scale=3.0,
-    variant=None,
-    entropy_coef=0.0,
-    gamma=0.99,
-)
-
-cfg_test = Namespace(
-    n_eval_steps=10_000,
-)
+from default_config import cfg as _cfg
 
 
 def make_env(env_constructor, rank, seed=0):
@@ -133,7 +91,7 @@ def make_model(cfg: Namespace) -> Any:
         # del alg_kwargs["learning_rate"]
         # alg_kwargs["n_episodes_rollout"] = 100
     model = cfg.alg(
-        "MlpPolicy",
+        nn.MixedPolicy,
         env,
         **alg_kwargs,
     )
@@ -283,7 +241,7 @@ def collect_metrics(
     with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
     cfg = patch_old_configs(cfg)
-    env_kwargs = {**make_env_kwargs(cfg), "is_eval": True, "single_step": False}
+    env_kwargs = {**make_env_kwargs(cfg), "is_eval": True, "single_step": False, 'world_radius': 17.0}
     env = cfg.env_class(**env_kwargs)
     model = make_model(cfg)
     if model is None:
@@ -360,7 +318,9 @@ def aggregate_results(
     progression: bool,
     target_ts: Optional[int],
     eval_steps: int,
+    df_concat_paths: List[Path],
 ) -> None:
+    dfs_to_concat = [pd.read_csv(p) for p in df_concat_paths]
     if not out_dir.exists():
         out_dir.mkdir()
     paths = [x for p in path_strs for x in expand_paths(p, progression, target_ts)]
@@ -369,7 +329,7 @@ def aggregate_results(
         r for r in Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs)) if r is not None
     ]
     df_contents = [r[0] for r in results]
-    df = pd.concat(df_contents, ignore_index=True)
+    df = pd.concat(df_contents + dfs_to_concat, ignore_index=True)
     df.to_csv(out_dir / "data.csv", index=False)
     trajectories_dir = out_dir / "trajectories"
     if not trajectories_dir.exists():
@@ -387,6 +347,20 @@ def aggregate_results(
         )
 
 
+def generate_spline_data(path: Path) -> None:
+    df = pd.read_csv(path, header=None)
+    df[0] = np.log2(df[0])
+    cs = CubicSpline(df[0], df[1])
+    interps = [
+            [x, cs(x)]
+            for x in np.arange(df[0].min(), df[0].max(), 0.02)
+            ]
+    df = pd.concat([df, pd.DataFrame(interps)])
+    df.to_csv('optimal-interp.csv', header=None)
+
+    
+
+
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", type=str)
@@ -396,6 +370,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--progression", action="store_true")
     parser.add_argument("--target_ts", type=int, default=None)
     parser.add_argument("--eval_steps", type=int, default=10_000)
+    parser.add_argument("--include_csv", type=str, action='append')
     parser.add_argument("-j", type=int, default=1)
     return parser.parse_args()
 
@@ -403,8 +378,12 @@ def get_args() -> argparse.Namespace:
 def main() -> None:
     args = get_args()
     args.out_dir = Path(args.out_dir)
+    if args.include_csv is None:
+        args.include_csv = []
 
-    if args.command == "test":
+    if args.command == "eval":
+        if args.target_ts is None:
+            raise ValueError("Please set --target_ts")
         aggregate_results(
             args.targets,
             args.out_dir,
@@ -412,7 +391,10 @@ def main() -> None:
             args.progression,
             args.target_ts,
             args.eval_steps,
+            args.include_csv,
         )
+    elif args.command == "spline":
+        generate_spline_data(args.targets[0])
     elif args.command == "run":
         run_experiments(args.targets, args.num_trials, args.j)
     else:
