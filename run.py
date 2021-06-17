@@ -23,84 +23,14 @@ from torch.utils.tensorboard import SummaryWriter
 from joblib import Parallel, delayed  # type: ignore
 from tqdm import tqdm  # type: ignore
 import pandas as pd  # type: ignore
-from scipy.interpolate import CubicSpline # type: ignore
+from scipy.interpolate import CubicSpline  # type: ignore
+from stable_baselines3.common.callbacks import EvalCallback
+from PIL import Image  # type: ignore
 
 import nn
 from callback import LoggingCallback
 import util
 from default_config import cfg as _cfg
-
-
-def make_env(env_constructor, rank, seed=0):
-    def _init():
-        env = env_constructor()
-        env.seed(seed + rank)
-        return env
-
-    set_random_seed(seed)
-    return _init
-
-
-def make_env_kwargs(cfg: Namespace) -> gym.Env:
-    return {
-        "variant": cfg.variant,
-        "goal_radius": cfg.goal_radius,
-        "world_radius": cfg.world_radius,
-        "env_shape": cfg.env_shape,
-        "obs_type": cfg.obs_type,
-        "reward_structure": cfg.reward_structure,
-        "single_step": cfg.single_step,
-        "max_step_scale": cfg.max_step_scale,
-    }
-
-
-def make_policy_kwargs(cfg: Namespace) -> gym.Env:
-    return {
-        "features_extractor_class": nn.BottleneckPolicy,
-        "features_extractor_kwargs": {
-            "out_size": cfg.fe_out_size,
-            "ratio": cfg.fe_out_ratio,
-            "bottleneck": cfg.bottleneck,
-            "bottleneck_hard": cfg.bottleneck_hard,
-            "pre_arch": cfg.pre_arch,
-            "post_arch": cfg.post_arch,
-            "temp": cfg.bottleneck_temperature,
-            "act": cfg.policy_activation,
-        },
-        "net_arch": cfg.policy_net_arch,
-    }
-
-
-def make_model(cfg: Namespace) -> Any:
-    env_kwargs = make_env_kwargs(cfg)
-    env = cfg.env_class(is_eval=False, **env_kwargs)
-    policy_kwargs = make_policy_kwargs(cfg)
-    alg_kwargs = {
-        "n_steps": cfg.n_steps,
-        "batch_size": cfg.batch_size,
-        "policy_kwargs": policy_kwargs,
-        "verbose": 0,
-        "learning_rate": cfg.learning_rate,
-        "device": cfg.device,
-        "ent_coef": cfg.entropy_coef,
-        "gamma": cfg.gamma,
-    }
-    if cfg.alg != PPO:
-        del alg_kwargs["n_steps"]
-        # del alg_kwargs["batch_size"]
-        # del alg_kwargs["learning_rate"]
-        # alg_kwargs["n_episodes_rollout"] = 100
-    model = cfg.alg(
-        nn.MixedPolicy,
-        env,
-        **alg_kwargs,
-    )
-    if cfg.init_model_path is not None:
-        try:
-            model.policy.load_state_dict(torch.load(cfg.init_model_path))
-        except:
-            return None
-    return model
 
 
 def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
@@ -114,8 +44,17 @@ def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         text_fo.write(str(cfg))
     with (log_dir / "config.pkl").open("wb") as binary_fo:
         pkl.dump(cfg, binary_fo)
-    env_kwargs = make_env_kwargs(cfg)
+    env_kwargs = util.make_env_kwargs(cfg)
     env_eval = DummyVecEnv([lambda: cfg.env_class(is_eval=True, **env_kwargs)])
+    # logging_callback = EvalCallback(
+    #     eval_env=env_eval,
+    #     n_eval_episodes=100,
+    #     eval_freq=2000,
+    #     # writer=writer,
+    #     verbose=1,
+    #     # save_all_checkpoints=cfg.save_all_checkpoints,
+    #     # cfg=cfg,
+    # )
     logging_callback = LoggingCallback(
         eval_env=env_eval,
         n_eval_episodes=cfg.eval_steps,
@@ -125,7 +64,7 @@ def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         save_all_checkpoints=cfg.save_all_checkpoints,
         cfg=cfg,
     )
-    model = make_model(cfg)
+    model = util.make_model(cfg)
     if model is None:
         raise ValueError("Could not restore model.")
     model.learn(
@@ -167,6 +106,10 @@ def run_experiments(
 
 
 def patch_old_configs(cfg: Namespace) -> Namespace:
+    if not hasattr(cfg, "rs_multiplier"):
+        cfg.rs_multiplier = 1.0
+    if not hasattr(cfg, "half_life"):
+        cfg.half_life = float("inf")
     if not hasattr(cfg, "gamma"):
         cfg.gamma = 0.99
     if not hasattr(cfg, "bottleneck_hard"):
@@ -182,12 +125,12 @@ def patch_old_configs(cfg: Namespace) -> Namespace:
 
 def get_one_hot_vectors(policy: Any) -> np.ndarray:
     _data = []
-    bn_size = next(policy.features_extractor.post_net.modules())[0].in_features
+    bn_size = next(policy.mlp_extractor.post_net.modules())[0].in_features
     for i in range(bn_size):
         x = torch.zeros(bn_size)
         x[i] = 1.0
         with torch.no_grad():
-            x = policy.features_extractor.post_net(x)
+            x = policy.mlp_extractor.post_net(x)
             x = policy.action_net(x)
         _data.append(x.numpy())
     return np.array(_data)
@@ -201,7 +144,7 @@ def is_border(m, i, j) -> bool:
     return False
 
 
-def get_lexicon_map(features_extractor: torch.nn.Module) -> None:
+def get_lexicon_map(mlp_extractor: torch.nn.Module) -> None:
     n_divs = 40
     m = np.zeros([n_divs + 1] * 2, dtype=np.int64)
     bound = 1.0
@@ -213,7 +156,7 @@ def get_lexicon_map(features_extractor: torch.nn.Module) -> None:
                 inp = torch.tensor(
                     [-bound + 2 * bound * i / n_divs, -bound + 2 * bound * j / n_divs]
                 )
-                m[i, j] = features_extractor.pre_net(inp).argmax().item()  # type: ignore
+                m[i, j] = mlp_extractor.pre_net(inp).argmax().item()  # type: ignore
     for i in range(2 * n_divs - 1):
         for j in range(2 * n_divs - 1):
             c = "  "
@@ -237,13 +180,18 @@ def collect_metrics(
     model_path: Path,
     out_path: Path,
     eval_steps: int,
-) -> Optional[Tuple[pd.DataFrame, List[List]]]:
+) -> Optional[pd.DataFrame]:
     with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
     cfg = patch_old_configs(cfg)
-    env_kwargs = {**make_env_kwargs(cfg), "is_eval": True, "single_step": False, 'world_radius': 17.0}
+    env_kwargs = {
+        **util.make_env_kwargs(cfg),
+        "is_eval": True,
+        "single_step": False,
+        "world_radius": 9.0,
+    }
     env = cfg.env_class(**env_kwargs)
-    model = make_model(cfg)
+    model = util.make_model(cfg)
     if model is None:
         print(f'Could not restore model "{cfg.init_model_path}"')
         return None
@@ -254,18 +202,28 @@ def collect_metrics(
         print(e)
         return None
     vectors = get_one_hot_vectors(model.policy)
-    features_extractor = policy.features_extractor.cpu()
+    mlp_extractor = policy.mlp_extractor.cpu()
     bottleneck_values = []
     steps_values = []
     successes = 0.0
     trajs: List[List] = []
-    n_episodes = 0
+    # n_episodes = 0
+    # TODO
+    n_episodes = eval_steps
     n_steps = 0
     discretize = cfg.bottleneck != "none"
-    while n_steps < eval_steps:
+
+    g_rad = env.goal_radius / env.world_radius
+    lo = int(np.ceil(n_episodes * g_rad ** 2))
+    hi = int(np.ceil(n_episodes / (1 - g_rad ** 2)))
+
+    # while n_steps < eval_steps:
+    for i in range(lo, hi):
         n_episodes += 1
+        env.reset()
+        env.fib_disc_init(i, hi)
         ep_len, bns, success, traj = util.eval_episode(
-            policy, features_extractor, env, discretize
+            policy, mlp_extractor, env, discretize
         )
         n_steps += ep_len
         successes += success
@@ -275,6 +233,21 @@ def collect_metrics(
     np_bn_values = np.stack(bottleneck_values)
     entropies = util.get_metrics(np_bn_values)
     sample_id = str(uuid.uuid4())
+
+    trajectories_dir = out_path / "trajectories"
+    if not trajectories_dir.exists():
+        trajectories_dir.mkdir()
+    select = lambda x: np.array([t[x] for t in trajs])
+    np.savez(
+        trajectories_dir / (sample_id + ".npz"),
+        t=select(0),
+        s=select(1),
+        a=select(2),
+        r=select(3),
+        s_next=select(4),
+        done=select(5),
+    )
+
     contents = {
         "path": str(model_path),
         "uuid": sample_id,
@@ -286,7 +259,7 @@ def collect_metrics(
         "vectors": vectors.tolist(),
         **vars(cfg),
     }
-    return pd.DataFrame({k: [v] for k, v in contents.items()}), trajs
+    return pd.DataFrame({k: [v] for k, v in contents.items()})
 
 
 def expand_paths(
@@ -328,37 +301,18 @@ def aggregate_results(
     results = [
         r for r in Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs)) if r is not None
     ]
-    df_contents = [r[0] for r in results]
+    df_contents = results
     df = pd.concat(df_contents + dfs_to_concat, ignore_index=True)
     df.to_csv(out_dir / "data.csv", index=False)
-    trajectories_dir = out_dir / "trajectories"
-    if not trajectories_dir.exists():
-        trajectories_dir.mkdir()
-    for vals, trajs in results:
-        select = lambda x: np.array([t[x] for t in trajs])
-        np.savez(
-            trajectories_dir / (vals["uuid"][0] + ".npz"),
-            t=select(0),
-            s=select(1),
-            a=select(2),
-            r=select(3),
-            s_next=select(4),
-            done=select(5),
-        )
 
 
 def generate_spline_data(path: Path) -> None:
     df = pd.read_csv(path, header=None)
     df[0] = np.log2(df[0])
     cs = CubicSpline(df[0], df[1])
-    interps = [
-            [x, cs(x)]
-            for x in np.arange(df[0].min(), df[0].max(), 0.02)
-            ]
+    interps = [[x, cs(x)] for x in np.arange(df[0].min(), df[0].max(), 0.02)]
     df = pd.concat([df, pd.DataFrame(interps)])
-    df.to_csv('optimal-interp.csv', header=None)
-
-    
+    df.to_csv("optimal-interp.csv", header=None)
 
 
 def get_args() -> argparse.Namespace:
@@ -370,7 +324,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--progression", action="store_true")
     parser.add_argument("--target_ts", type=int, default=None)
     parser.add_argument("--eval_steps", type=int, default=10_000)
-    parser.add_argument("--include_csv", type=str, action='append')
+    parser.add_argument("--include_csv", type=str, action="append")
     parser.add_argument("-j", type=int, default=1)
     return parser.parse_args()
 

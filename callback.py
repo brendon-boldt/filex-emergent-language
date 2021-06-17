@@ -101,11 +101,14 @@ class LoggingCallback(EventCallback):
             episode_lengths = []
             bn_activations = []
             # n_eval_episodes is the _actually_ the number of steps
+            env = self.eval_env.envs[0]
             while sum(episode_lengths) < self.n_eval_episodes:
+                env.reset()
                 ep_len, bns, success, _traj = util.eval_episode(
                     self.model.policy,
-                    self.model.policy.features_extractor,
-                    self.eval_env.envs[0],
+                    # self.model.policy.features_extractor,
+                    self.model.policy.mlp_extractor,
+                    env,
                     self.cfg != "none",
                 )
                 episode_rewards.append(success)

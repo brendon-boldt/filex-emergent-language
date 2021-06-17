@@ -1,4 +1,4 @@
-from typing import Tuple, Any, Dict, Union, cast
+from typing import Tuple, Any, Dict, Union, cast, Optional
 
 import gym  # type: ignore
 from gym import spaces
@@ -7,6 +7,8 @@ import numpy as np  # type: ignore
 StepResult = Tuple[Any, float, bool, Dict]
 
 rng = np.random.default_rng()
+GOLDEN_RATIO = (np.sqrt(5) + 1) / 2
+GOLDEN_ANGLE = 2 * np.pi * (2 - GOLDEN_RATIO)
 
 
 def get_norm(x):
@@ -65,7 +67,9 @@ class Virtual(gym.Env):
         goal_radius: float,
         world_radius: float,
         max_step_scale: float,
-        variant: str,
+        half_life: float,
+        rs_multiplier: float,
+        variant: Optional[str],
         **kwargs,
     ) -> None:
         super(self.__class__, self).__init__()
@@ -75,22 +79,28 @@ class Virtual(gym.Env):
         self.is_eval = is_eval
         self.max_step_scale = max_step_scale
         self.variant = variant
+        self.half_life = half_life
+        self.rs_multiplier = rs_multiplier
 
         self.max_steps = int(self.world_radius * self.max_step_scale)
 
+        assert obs_type in ("vector", "direction", "both")
+        self.obs_type = obs_type
+
         # TODO Add different distribution
         # TODO Add n-dimensional
+        if self.obs_type == "both":
+            obs_shape = (4,)
+        else:
+            obs_shape = (2,)
         self.observation_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(2,), dtype=np.float32
+            low=-1.0, high=1.0, shape=obs_shape, dtype=np.float32
         )
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
 
         # assert reward_structure in ("proximity", "none", "constant", "constant-only")
         assert reward_structure in ("cosine", "cosine-only", "constant", "euclidean")
         self.reward_structure = reward_structure
-
-        assert obs_type in ("vector", "direction")
-        self.obs_type = obs_type
 
         # For type purposes
         self.num_steps = 0
@@ -115,29 +125,35 @@ class Virtual(gym.Env):
         action /= self.world_radius
         self.location += action
 
-    def _get_observation(self) -> np.ndarray:
+    def get_observation(self) -> np.ndarray:
+        direction = -self.location / get_norm(self.location)
+        vector = -self.location
         if self.obs_type == "direction":
             # Observation should never have norm 0 since it would be at the goal
-            return -self.location / get_norm(self.location)
+            return direction
         elif self.obs_type == "vector":
-            return -self.location
+            return vector
+        elif self.obs_type == "both":
+            return np.concatenate([direction, vector])
         else:
             raise NotImplementedError()
 
     def _get_step_result(self, action: np.ndarray) -> StepResult:
         info: Dict[str, Any] = {}
 
-        observation = self._get_observation()
+        observation = self.get_observation()
 
         at_goal = get_norm(self.location) <= self.goal_radius / self.world_radius
         if (self.num_steps > 0 and at_goal) or self.num_steps > self.max_steps:
             self.stop = True
 
+        if not self.is_eval and rng.random() > 2 ** (-1 / self.half_life):
+            self.stop = True
+
         prev_vec = action - self.location
         # TODO Do we need to worry about cosine distance not checking magnitude?
         cosine_sim = cosine_similarity(prev_vec, action)
-        # reward_scale = 1.0 if self.variant == "unscaled" else 0.001
-        reward_scale = 1.0 if self.variant == "unscaled" else 0.01
+        reward_scale = 0.1
         if self.single_step:
             if self.reward_structure == "euclidean":
                 reward = -get_norm(
@@ -156,29 +172,22 @@ class Virtual(gym.Env):
             info["at_goal"] = at_goal
             reward = 0.0
             if self.reward_structure in ("cosine", "cosine-only"):
-                reward += (cosine_sim - 2) * reward_scale
+                reward += -(1 - self.rs_multiplier * cosine_sim) * reward_scale
             elif self.reward_structure == "euclidean":
-                reward = -reward_scale * get_norm(
+                norm = get_norm(
                     prev_vec / get_norm(prev_vec) - action * self.world_radius
                 )
+                reward = -reward_scale * (1 + norm * self.rs_multiplier)
             elif self.reward_structure == "constant":
                 reward += -reward_scale
             if self.stop:
-                if at_goal and self.reward_structure == "cosine":
+                if at_goal and self.reward_structure in ["cosine"]:
                     reward += 1.0
                 else:
                     reward += 0
         return observation, reward, self.stop, info
 
     def step(self, action: np.ndarray) -> StepResult:
-        theta = np.pi / 4
-        transform = np.array(
-            [
-                [np.cos(theta), -np.sin(theta)],
-                [np.sin(theta), np.cos(theta)],
-            ]
-        )
-        # action = action @ transform
         if self.stop:
             raise Exception("Cannot take action after the agent has stopped")
         self.num_steps += 1
@@ -186,7 +195,7 @@ class Virtual(gym.Env):
         prev_location = self.location.copy()
         self._take_action(action)
         obs, reward, done, info = self._get_step_result(action)
-        obs = self._get_observation()
+        obs = self.get_observation()
         return obs, reward, done, info
 
     def reset(self) -> np.ndarray:
@@ -202,9 +211,18 @@ class Virtual(gym.Env):
             r = rng.random()
             radius = b - np.sqrt((1 - r) * (b - a) * (b - c))
         else:
-            radius = rng.uniform(self.goal_radius / self.world_radius, 1.0)
+            radius = np.sqrt(
+                rng.uniform((self.goal_radius / self.world_radius) ** 2, 1.0)
+            )
         self.location = radius * u / norm
         self.stop = False
         self.num_steps = 0
-        dummy_action = np.zeros(self.observation_space.shape)
-        return self._get_observation()
+        return self.get_observation()
+
+    def fib_disc_init(self, i, n) -> np.ndarray:
+        theta = i * GOLDEN_ANGLE
+        r = np.sqrt(i / n)
+        if r > self.goal_radius:
+            raise ValueError(f"Index i={i} is too small (within the goal radius).")
+        self.location = r * np.array([np.cos(theta), np.sin(theta)])
+        return self.get_observation()

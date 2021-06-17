@@ -1,10 +1,13 @@
-from typing import Tuple, List
+from typing import Tuple, List, Dict, Any
 from functools import partial
+from argparse import Namespace
 
 import numpy as np  # type: ignore
 import torch
+import gym  # type: ignore
+from stable_baselines3 import PPO  # type: ignore
 
-from typing import Dict
+import nn
 
 
 def _xlx(x: float) -> float:
@@ -27,14 +30,14 @@ def get_metrics(o: np.ndarray) -> Dict[str, np.ndarray]:
     }
 
 
-def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float, List]:
-    obs = env.reset()
+def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float, List]:
+    obs = env.get_observation()
     done = False
     steps = 0
     bns = []
-    original_bottlenck = policy.features_extractor.bottleneck
+    original_bottlenck = policy.mlp_extractor.bottleneck
     if discretize:
-        policy.features_extractor.bottleneck = partial(
+        policy.mlp_extractor.bottleneck = partial(
             torch.nn.functional.gumbel_softmax,
             hard=True,
             tau=1e-20,
@@ -44,14 +47,8 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float, L
     while not done:
         obs_tensor = torch.Tensor(obs)
         with torch.no_grad():
-            policy_out = policy(obs_tensor, deterministic=True)
-            if env.discrete_action:
-                act = np.int64(policy_out[0].numpy())
-            else:
-                if type(policy_out) == tuple:
-                    act = policy_out[0].numpy()
-                else:
-                    act = policy_out.numpy()
+            policy_out = policy(obs_tensor.unsqueeze(0), deterministic=True)
+            act = policy_out[0][0].numpy()
             bn = fe.forward_bottleneck(obs_tensor).numpy()
         bns.append(bn)
         prev_loc = env.location.copy()
@@ -61,9 +58,89 @@ def eval_episode(policy, fe, env, discretize=False) -> Tuple[int, List, float, L
         )
         total_reward += reward
         steps += 1
-    policy.features_extractor.bottleneck = original_bottlenck
+    policy.mlp_extractor.bottleneck = original_bottlenck
     if hasattr(env, "use_reward") and not env.use_reward:
         pass
     else:
         total_reward = float(info["at_goal"])
     return steps, bns, total_reward, traj
+
+
+def make_env(env_constructor, rank, seed=0):
+    def _init():
+        env = env_constructor()
+        env.seed(seed + rank)
+        return env
+
+    set_random_seed(seed)
+    return _init
+
+
+def make_env_kwargs(cfg: Namespace) -> gym.Env:
+    return {
+        "rs_multiplier": cfg.rs_multiplier,
+        "variant": cfg.variant,
+        "half_life": cfg.half_life,
+        "goal_radius": cfg.goal_radius,
+        "world_radius": cfg.world_radius,
+        "obs_type": cfg.obs_type,
+        "reward_structure": cfg.reward_structure,
+        "single_step": cfg.single_step,
+        "max_step_scale": cfg.max_step_scale,
+    }
+
+
+def make_policy_kwargs(cfg: Namespace) -> gym.Env:
+    return {
+        # "features_extractor_class": nn.BottleneckPolicy,
+        # "features_extractor_kwargs": {
+        #     "out_size": cfg.fe_out_size,
+        #     "ratio": cfg.fe_out_ratio,
+        #     "bottleneck": cfg.bottleneck,
+        #     "bottleneck_hard": cfg.bottleneck_hard,
+        #     "pre_arch": cfg.pre_arch,
+        #     "post_arch": cfg.post_arch,
+        #     "temp": cfg.bottleneck_temperature,
+        #     "act": cfg.policy_activation,
+        # },
+        "net_arch": {
+            "bottleneck": cfg.bottleneck,
+            "bottleneck_hard": cfg.bottleneck_hard,
+            "pre_arch": cfg.pre_arch,
+            "post_arch": cfg.post_arch,
+            "temp": cfg.bottleneck_temperature,
+            "act": cfg.policy_activation,
+        },
+    }
+
+
+def make_model(cfg: Namespace) -> Any:
+    env_kwargs = make_env_kwargs(cfg)
+    env = cfg.env_class(is_eval=False, **env_kwargs)
+    policy_kwargs = make_policy_kwargs(cfg)
+    alg_kwargs = {
+        "n_steps": cfg.n_steps,
+        "batch_size": cfg.batch_size,
+        "policy_kwargs": policy_kwargs,
+        "verbose": 0,
+        "learning_rate": cfg.learning_rate,
+        "device": cfg.device,
+        "ent_coef": cfg.entropy_coef,
+        "gamma": cfg.gamma,
+    }
+    if cfg.alg != PPO:
+        del alg_kwargs["n_steps"]
+        # del alg_kwargs["batch_size"]
+        # del alg_kwargs["learning_rate"]
+        # alg_kwargs["n_episodes_rollout"] = 100
+    model = cfg.alg(
+        nn.MixedPolicy,
+        env,
+        **alg_kwargs,
+    )
+    if cfg.init_model_path is not None:
+        try:
+            model.policy.load_state_dict(torch.load(cfg.init_model_path))
+        except:
+            return None
+    return model
