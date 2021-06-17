@@ -25,29 +25,11 @@ class BottleneckExtractor(nn.Module):
     def __init__(
         self,
         feature_dim: int,
-        # net_arch: List[Union[int, Dict[str, List[int]]]],
         net_arch: Dict[str, Any],
         activation_fn: Type[nn.Module],
         device: Union[th.device, str] = "auto",
-        # *,
-        # obs_space: gym.spaces.Box,
-        # input_dim: gym.spaces.Box,
-        # bottleneck: str,
-        # pre_arch: List[int],
-        # post_arch: List[int],
-        # temp: float,
-        # bottleneck_hard: bool,
-        # act: str,
-        # **kwargs,
     ) -> None:
         super(self.__class__, self).__init__()
-
-        # if act == "tanh":
-        #     activation: nn.Module = nn.Tanh()
-        # elif act == "relu":
-        #     activation = nn.ReLU()
-        # else:
-        #     raise ValueError(f'Activation "{act}" not recognized.')
 
         # We need to make a copy of this bebcause stable baselines reuses references
         pre_arch = [x for x in net_arch["pre_arch"]]

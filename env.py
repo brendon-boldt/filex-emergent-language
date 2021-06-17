@@ -62,7 +62,6 @@ class Virtual(gym.Env):
         *,
         reward_structure: str,
         obs_type: str,
-        single_step: bool,
         is_eval: bool,
         goal_radius: float,
         world_radius: float,
@@ -76,7 +75,6 @@ class Virtual(gym.Env):
         super(self.__class__, self).__init__()
         self.goal_radius = goal_radius
         self.world_radius = world_radius
-        self.single_step = single_step
         self.is_eval = is_eval
         self.max_step_scale = max_step_scale
         self.variant = variant
@@ -152,23 +150,13 @@ class Virtual(gym.Env):
         if not self.is_eval and rng.random() > 2 ** (-1 / self.half_life):
             self.stop = True
 
+        reward_each_step = -reward_scale if self.base_reward_type == 'every-step'
         prev_vec = action - self.location
         # TODO Do we need to worry about cosine distance not checking magnitude?
         cosine_sim = cosine_similarity(prev_vec, action)
         # Make sure the reward signal stay constant even with different multipliers
         scale_factor = self.reward_scale / (1 + self.rs_multiplier)
-        if self.single_step:
-            if self.reward_structure == "euclidean":
-                reward = -get_norm(
-                    prev_vec / get_norm(prev_vec) - action * self.world_radius
-                )
-            else:
-                reward = cosine_sim
-            if not self.is_eval:
-                reward *= self.reward_scale
-            self.stop = self.num_steps > 0
-            info["at_goal"] = reward
-        elif self.is_eval:
+        if self.is_eval:
             reward = float(at_goal)
             info["at_goal"] = at_goal
         else:

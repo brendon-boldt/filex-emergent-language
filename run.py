@@ -46,15 +46,6 @@ def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         pkl.dump(cfg, binary_fo)
     env_kwargs = util.make_env_kwargs(cfg)
     env_eval = DummyVecEnv([lambda: cfg.env_class(is_eval=True, **env_kwargs)])
-    # logging_callback = EvalCallback(
-    #     eval_env=env_eval,
-    #     n_eval_episodes=100,
-    #     eval_freq=2000,
-    #     # writer=writer,
-    #     verbose=1,
-    #     # save_all_checkpoints=cfg.save_all_checkpoints,
-    #     # cfg=cfg,
-    # )
     logging_callback = LoggingCallback(
         eval_env=env_eval,
         n_eval_episodes=cfg.eval_steps,
@@ -189,7 +180,6 @@ def collect_metrics(
     env_kwargs = {
         **util.make_env_kwargs(cfg),
         "is_eval": True,
-        "single_step": False,
         "world_radius": 9.0,
     }
     env = cfg.env_class(**env_kwargs)
