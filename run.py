@@ -106,6 +106,8 @@ def run_experiments(
 
 
 def patch_old_configs(cfg: Namespace) -> Namespace:
+    if not hasattr(cfg, "reward_scale"):
+        cfg.reward_scale = 0.1
     if not hasattr(cfg, "rs_multiplier"):
         cfg.rs_multiplier = 1.0
     if not hasattr(cfg, "half_life"):

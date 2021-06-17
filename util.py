@@ -76,9 +76,10 @@ def make_env(env_constructor, rank, seed=0):
     return _init
 
 
-def make_env_kwargs(cfg: Namespace) -> gym.Env:
+def make_env_kwargs(cfg: Namespace) -> Dict:
     return {
         "rs_multiplier": cfg.rs_multiplier,
+        "reward_scale": cfg.reward_scale,
         "variant": cfg.variant,
         "half_life": cfg.half_life,
         "goal_radius": cfg.goal_radius,

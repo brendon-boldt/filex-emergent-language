@@ -69,6 +69,7 @@ class Virtual(gym.Env):
         max_step_scale: float,
         half_life: float,
         rs_multiplier: float,
+        reward_scale: float,
         variant: Optional[str],
         **kwargs,
     ) -> None:
@@ -80,6 +81,7 @@ class Virtual(gym.Env):
         self.max_step_scale = max_step_scale
         self.variant = variant
         self.half_life = half_life
+        self.reward_scale = reward_scale
         self.rs_multiplier = rs_multiplier
 
         self.max_steps = int(self.world_radius * self.max_step_scale)
@@ -153,7 +155,8 @@ class Virtual(gym.Env):
         prev_vec = action - self.location
         # TODO Do we need to worry about cosine distance not checking magnitude?
         cosine_sim = cosine_similarity(prev_vec, action)
-        reward_scale = 0.1
+        # Make sure the reward signal stay constant even with different multipliers
+        scale_factor = self.reward_scale / (1 + self.rs_multiplier)
         if self.single_step:
             if self.reward_structure == "euclidean":
                 reward = -get_norm(
@@ -162,7 +165,7 @@ class Virtual(gym.Env):
             else:
                 reward = cosine_sim
             if not self.is_eval:
-                reward *= reward_scale
+                reward *= self.reward_scale
             self.stop = self.num_steps > 0
             info["at_goal"] = reward
         elif self.is_eval:
@@ -172,14 +175,14 @@ class Virtual(gym.Env):
             info["at_goal"] = at_goal
             reward = 0.0
             if self.reward_structure in ("cosine", "cosine-only"):
-                reward += -(1 - self.rs_multiplier * cosine_sim) * reward_scale
+                reward += -(1 - self.rs_multiplier * cosine_sim) * scale_factor
             elif self.reward_structure == "euclidean":
                 norm = get_norm(
                     prev_vec / get_norm(prev_vec) - action * self.world_radius
                 )
-                reward = -reward_scale * (1 + norm * self.rs_multiplier)
+                reward = -scale_factor * (1 + norm * self.rs_multiplier)
             elif self.reward_structure == "constant":
-                reward += -reward_scale
+                reward += -self.reward_scale
             if self.stop:
                 if at_goal and self.reward_structure in ["cosine"]:
                     reward += 1.0
