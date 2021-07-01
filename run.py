@@ -98,22 +98,15 @@ def run_experiments(
 
 
 def patch_old_configs(cfg: Namespace) -> Namespace:
-    if not hasattr(cfg, "base_reward_type"):
-        cfg.reward_scale = "each-step"
+    """Add recently added parameters to old config objects.
+
+    Example
+    ```
     if not hasattr(cfg, "reward_scale"):
         cfg.reward_scale = 0.1
-    if not hasattr(cfg, "rs_multiplier"):
-        cfg.rs_multiplier = 1.0
-    if not hasattr(cfg, "half_life"):
-        cfg.half_life = float("inf")
-    if not hasattr(cfg, "gamma"):
-        cfg.gamma = 0.99
-    if not hasattr(cfg, "bottleneck_hard"):
-        cfg.bottleneck_hard = False
-    if not hasattr(cfg, "entropy_coef"):
-        cfg.entropy_coef = 0.0
-    if not hasattr(cfg, "init_model_path"):
-        cfg.init_model_path = None
+    ```
+
+    """
     return cfg
 
 
