@@ -85,7 +85,7 @@ class BottleneckExtractor(nn.Module):
         pi_x = self.pre_net(features)
         pi_x = self.bottleneck(pi_x)
         pi_x = self.post_net(pi_x)
-        vf_x = 0 * self.vf_net(features)
+        vf_x = self.vf_net(features)
         return pi_x, vf_x
 
     def forward_bottleneck(self, x: torch.Tensor) -> torch.Tensor:

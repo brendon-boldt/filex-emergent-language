@@ -299,12 +299,13 @@ def make_heatmaps(
         plt.savefig(fig_dir / name)
         plt.close()
 
-
 def make_value_maps(
-    df: pd.DataFrame, groups: List[str], plot_shape: Tuple[int, int] = None
+    df: pd.DataFrame, groups: List[str], out_path: Path, plot_shape: Tuple[int, int] = None
 ) -> None:
     for group, filtered, axes in iter_groups(df, groups, plot_shape):
-        sorted_rows = filtered.iterrows()
+        # sorted_rows = filtered.iterrows()
+        sorted_rows = [r for r in filtered.iterrows()]
+        sorted_rows = sorted_rows[:1]
         for axis, (_, row) in zip(axes.reshape(-1), sorted_rows):
             axis.axis("off")
             # axis.set_title(f"{clusters:.2f}")
@@ -316,8 +317,8 @@ def make_value_maps(
             policy = model.policy
             policy.load_state_dict(torch.load(row.path))
 
-            resolution = 0x200
-            values = np.zeros([0x200] * 2, dtype=np.float32)
+            resolution = 0x80
+            values = np.full([resolution] * 2, -.4, dtype=np.float32)
             for i in range(resolution):
                 for j in range(resolution):
                     y = 1 - 2 * i / resolution
@@ -326,15 +327,16 @@ def make_value_maps(
                         continue
                     obs_tensor = torch.tensor([y, x])
                     policy_out = policy(obs_tensor.unsqueeze(0), deterministic=True)
-                    values[i, j] = policy_out[0][1].item()
-            breakpoint()
+                    values[i, j] = policy_out[1].item()
+            values = (values - values.min()) / (values.max() - values.min())
 
             invertd_color_list = (1 - np.array(plt.cm.inferno.colors)).tolist()
             cmap = mpcolors.ListedColormap(invertd_color_list)
-            im = axis.imshow(counts, interpolation="bicubic", cmap=cmap)
+            # im = axis.imshow(values, interpolation="bicubic", cmap=cmap)
+            im = axis.imshow(values, cmap=cmap)
 
         name = "value_map_" + "_".join(str(v).replace(".", ",") for v in group)
-        fig_dir = path / "value_maps"
+        fig_dir = out_path / "value_maps"
         if not fig_dir.exists():
             fig_dir.mkdir()
         plt.savefig(fig_dir / name)

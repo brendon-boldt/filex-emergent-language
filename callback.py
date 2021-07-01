@@ -157,7 +157,7 @@ class LoggingCallback(EventCallback):
             self.writer.add_scalar("mean_ep_length", mean_ep_length, self.num_timesteps)
             self.writer.add_scalar("rate", self.num_timesteps, self.num_timesteps)
 
-            if self.save_all_checkpoints or (self.num_timesteps % 100_000) == 0:
+            if self.save_all_checkpoints or (self.num_timesteps % 10_000) == 0:
                 torch.save(
                     self.model.policy.state_dict(),
                     self.log_path / f"model-{self.num_timesteps}.pt",

@@ -60,7 +60,8 @@ class Virtual(gym.Env):
     def __init__(
         self,
         *,
-        reward_structure: str,
+        base_reward_type: str,
+        reward_shape_type: str,
         obs_type: str,
         is_eval: bool,
         goal_radius: float,
@@ -98,9 +99,11 @@ class Virtual(gym.Env):
         )
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
 
-        # assert reward_structure in ("proximity", "none", "constant", "constant-only")
-        assert reward_structure in ("cosine", "cosine-only", "constant", "euclidean")
-        self.reward_structure = reward_structure
+        assert reward_shape_type in ("cosine", "l2")
+        self.reward_shape_type = reward_shape_type
+
+        assert base_reward_type in ("at-end", "every-step")
+        self.base_reward_type = base_reward_type
 
         # For type purposes
         self.num_steps = 0
@@ -150,32 +153,25 @@ class Virtual(gym.Env):
         if not self.is_eval and rng.random() > 2 ** (-1 / self.half_life):
             self.stop = True
 
-        reward_each_step = -reward_scale if self.base_reward_type == 'every-step'
         prev_vec = action - self.location
-        # TODO Do we need to worry about cosine distance not checking magnitude?
         cosine_sim = cosine_similarity(prev_vec, action)
-        # Make sure the reward signal stay constant even with different multipliers
-        scale_factor = self.reward_scale / (1 + self.rs_multiplier)
         if self.is_eval:
             reward = float(at_goal)
             info["at_goal"] = at_goal
         else:
             info["at_goal"] = at_goal
             reward = 0.0
-            if self.reward_structure in ("cosine", "cosine-only"):
-                reward += -(1 - self.rs_multiplier * cosine_sim) * scale_factor
-            elif self.reward_structure == "euclidean":
-                norm = get_norm(
-                    prev_vec / get_norm(prev_vec) - action * self.world_radius
-                )
-                reward = -scale_factor * (1 + norm * self.rs_multiplier)
-            elif self.reward_structure == "constant":
-                reward += -self.reward_scale
+            if self.reward_shape_type == "cosine":
+                reward += self.rs_multiplier * (cosine_sim - 1)
+            elif self.reward_shape_type == "l2":
+                raise NotImplementedError()
+                # norm = get_norm(
+                #     prev_vec / get_norm(prev_vec) - action * self.world_radius
+                # )
+                # reward = scale_factor * (reward_each_step + norm * self.rs_multiplier)
             if self.stop:
-                if at_goal and self.reward_structure in ["cosine"]:
+                if at_goal:
                     reward += 1.0
-                else:
-                    reward += 0
         return observation, reward, self.stop, info
 
     def step(self, action: np.ndarray) -> StepResult:

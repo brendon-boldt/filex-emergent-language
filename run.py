@@ -97,6 +97,8 @@ def run_experiments(
 
 
 def patch_old_configs(cfg: Namespace) -> Namespace:
+    if not hasattr(cfg, "base_reward_type"):
+        cfg.reward_scale = 'each-step'
     if not hasattr(cfg, "reward_scale"):
         cfg.reward_scale = 0.1
     if not hasattr(cfg, "rs_multiplier"):
