@@ -19,44 +19,7 @@ def cosine_similarity(x, y) -> float:
     return (x * y).sum() / max(get_norm(x) * get_norm(y), 1e-5)
 
 
-class Supervised(gym.Env):
-    # TODO Randomize
-    angle_offset = np.pi / 4.0
-    # TODO Parameterize
-    n_actions = 8
-
-    def __init__(
-        self,
-        *args,
-        is_eval=False,
-        **kwargs,
-    ) -> None:
-        super(self.__class__, self).__init__()
-        if self.angle_offset is None:
-            self.angle_offset = rng.random() * 2 * np.pi / self.n_actions
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
-        self.is_eval = is_eval
-        self.observation_space = spaces.Box(
-            low=-1.0, high=1.0, shape=(2,), dtype=np.float32
-        )
-        self.discrete_action = False
-        self.use_reward = False
-
-    def step(self, action: np.ndarray) -> StepResult:
-        if False or self.is_eval:
-            reward = cosine_similarity(action, self.target_vector)
-        else:
-            reward = -((action - self.target_vector) ** 2).sum() / 10
-        return self.target_vector, reward, True, {"at_goal": True}
-
-    def reset(self) -> np.ndarray:
-        idx = rng.integers(0, self.n_actions)
-        angle = self.angle_offset + 2 * np.pi * idx / self.n_actions
-        self.target_vector = np.array([np.sin(angle), np.cos(angle)])
-        return self.target_vector
-
-
-class Virtual(gym.Env):
+class NavToCenter(gym.Env):
     def __init__(
         self,
         *,

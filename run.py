@@ -28,6 +28,7 @@ from stable_baselines3.common.callbacks import EvalCallback
 from PIL import Image  # type: ignore
 
 import nn
+import env
 from callback import LoggingCallback
 import util
 from default_config import cfg as _cfg
@@ -45,7 +46,7 @@ def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     with (log_dir / "config.pkl").open("wb") as binary_fo:
         pkl.dump(cfg, binary_fo)
     env_kwargs = util.make_env_kwargs(cfg)
-    env_eval = DummyVecEnv([lambda: cfg.env_class(is_eval=True, **env_kwargs)])
+    env_eval = DummyVecEnv([lambda: env.NavToCenter(is_eval=True, **env_kwargs)])
     logging_callback = LoggingCallback(
         eval_env=env_eval,
         n_eval_episodes=cfg.eval_steps,
@@ -179,12 +180,12 @@ def collect_metrics(
     with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
     cfg = patch_old_configs(cfg)
-    env_kwargs = {
+    env_kwargs: Dict[str, Any] = {
         **util.make_env_kwargs(cfg),
         "is_eval": True,
         "world_radius": 9.0,
     }
-    env = cfg.env_class(**env_kwargs)
+    env = env.NavToCenter(**env_kwargs)
     model = util.make_model(cfg)
     if model is None:
         print(f'Could not restore model "{cfg.init_model_path}"')

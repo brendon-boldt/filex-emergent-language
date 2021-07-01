@@ -9,6 +9,7 @@ import pandas as pd  # type: ignore
 
 from default_config import cfg as _cfg
 from run import make_env_kwargs
+import env
 
 rng = np.random.default_rng()
 
@@ -57,7 +58,7 @@ def run_optimal_agents() -> None:
         "world_radius": 9.0,
         "obs_type": "vector",
     }
-    new_env = lambda: _cfg.env_class(**env_kwargs)
+    new_env = lambda: env.NavToCenter(**env_kwargs)
     results = Parallel(n_jobs=20)(
         delayed(test_policy)(new_env(), i, 10_000) for i in range(3, 33)
     )
