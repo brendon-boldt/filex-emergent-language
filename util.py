@@ -80,13 +80,11 @@ def make_env(env_constructor, rank, seed=0):
 def make_env_kwargs(cfg: Namespace) -> Dict:
     return {
         "rs_multiplier": cfg.rs_multiplier,
-        "base_reward_type": cfg.base_reward_type,
         "reward_scale": cfg.reward_scale,
         "half_life": cfg.half_life,
         "goal_radius": cfg.goal_radius,
         "world_radius": cfg.world_radius,
         "obs_type": cfg.obs_type,
-        "reward_shape_type": cfg.reward_shape_type,
         "max_step_scale": cfg.max_step_scale,
     }
 

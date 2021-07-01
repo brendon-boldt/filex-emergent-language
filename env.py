@@ -23,8 +23,6 @@ class NavToCenter(gym.Env):
     def __init__(
         self,
         *,
-        base_reward_type: str,
-        reward_shape_type: str,
         obs_type: str,
         is_eval: bool,
         goal_radius: float,
@@ -59,12 +57,6 @@ class NavToCenter(gym.Env):
             low=-1.0, high=1.0, shape=obs_shape, dtype=np.float32
         )
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
-
-        assert reward_shape_type in ("cosine", "l2")
-        self.reward_shape_type = reward_shape_type
-
-        assert base_reward_type in ("at-end", "every-step")
-        self.base_reward_type = base_reward_type
 
         # For type purposes
         self.num_steps = 0
@@ -122,17 +114,9 @@ class NavToCenter(gym.Env):
         else:
             info["at_goal"] = at_goal
             reward = 0.0
-            if self.reward_shape_type == "cosine":
-                reward += self.rs_multiplier * (cosine_sim - 1)
-            elif self.reward_shape_type == "l2":
-                raise NotImplementedError()
-                # norm = get_norm(
-                #     prev_vec / get_norm(prev_vec) - action * self.world_radius
-                # )
-                # reward = scale_factor * (reward_each_step + norm * self.rs_multiplier)
-            if self.stop:
-                if at_goal:
-                    reward += 1.0
+            reward += self.rs_multiplier * (cosine_sim - 1)
+            if self.stop and at_goal:
+                reward += 1.0
         return observation, reward, self.stop, info
 
     def step(self, action: np.ndarray) -> StepResult:

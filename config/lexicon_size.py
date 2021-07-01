@@ -6,7 +6,6 @@ def generate_configs() -> Iterator[Dict]:
     base = {
         "total_timesteps": 100_000,
         "eval_freq": 5_000,
-        "reward_shape_type":"cosine",
         "reward_scale": 1.0,
     }
     n = 120

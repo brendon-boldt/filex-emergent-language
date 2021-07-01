@@ -21,9 +21,6 @@ cfg = argparse.Namespace(
     learning_rate=3e-3,
     save_all_checkpoints=False,
     init_model_path=None,
-    # TODO Rename
-    reward_shape_type="cosine",
-    base_reward_type="every-step",
     obs_type="vector",
     goal_radius=1.0,
     world_radius=9.0,
