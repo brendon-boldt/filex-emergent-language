@@ -299,8 +299,12 @@ def make_heatmaps(
         plt.savefig(fig_dir / name)
         plt.close()
 
+
 def make_value_maps(
-    df: pd.DataFrame, groups: List[str], out_path: Path, plot_shape: Tuple[int, int] = None
+    df: pd.DataFrame,
+    groups: List[str],
+    out_path: Path,
+    plot_shape: Tuple[int, int] = None,
 ) -> None:
     for group, filtered, axes in iter_groups(df, groups, plot_shape):
         # sorted_rows = filtered.iterrows()
@@ -318,7 +322,7 @@ def make_value_maps(
             policy.load_state_dict(torch.load(row.path))
 
             resolution = 0x80
-            values = np.full([resolution] * 2, -.4, dtype=np.float32)
+            values = np.full([resolution] * 2, -0.4, dtype=np.float32)
             for i in range(resolution):
                 for j in range(resolution):
                     y = 1 - 2 * i / resolution
