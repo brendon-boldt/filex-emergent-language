@@ -112,8 +112,6 @@ def patch_old_configs(cfg: Namespace) -> Namespace:
         cfg.bottleneck_hard = False
     if not hasattr(cfg, "entropy_coef"):
         cfg.entropy_coef = 0.0
-    if not hasattr(cfg, "variant"):
-        cfg.variant = None
     if not hasattr(cfg, "init_model_path"):
         cfg.init_model_path = None
     return cfg

@@ -33,7 +33,6 @@ class NavToCenter(gym.Env):
         half_life: float,
         rs_multiplier: float,
         reward_scale: float,
-        variant: Optional[str],
         **kwargs,
     ) -> None:
         super(self.__class__, self).__init__()
@@ -41,7 +40,6 @@ class NavToCenter(gym.Env):
         self.world_radius = world_radius
         self.is_eval = is_eval
         self.max_step_scale = max_step_scale
-        self.variant = variant
         self.half_life = half_life
         self.reward_scale = reward_scale
         self.rs_multiplier = rs_multiplier
@@ -153,17 +151,7 @@ class NavToCenter(gym.Env):
         # Pulled from http://extremelearning.com.au/how-to-generate-uniformly-random-points-on-n-spheres-and-n-balls/
         u = rng.normal(0, 1, n_dim)
         norm = (u ** 2).sum() ** 0.5
-        if not self.is_eval and self.variant == "triangle-init":
-            # https://en.wikipedia.org/wiki/Triangular_distribution
-            a = self.goal_radius / self.world_radius
-            c = a
-            b = 1.0
-            r = rng.random()
-            radius = b - np.sqrt((1 - r) * (b - a) * (b - c))
-        else:
-            radius = np.sqrt(
-                rng.uniform((self.goal_radius / self.world_radius) ** 2, 1.0)
-            )
+        radius = np.sqrt(rng.uniform((self.goal_radius / self.world_radius) ** 2, 1.0))
         self.location = radius * u / norm
         self.stop = False
         self.num_steps = 0

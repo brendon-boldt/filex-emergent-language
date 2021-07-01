@@ -29,7 +29,6 @@ cfg = argparse.Namespace(
     world_radius=9.0,
     # TODO Rename this since it is confusing
     max_step_scale=3.0,
-    variant=None,
     entropy_coef=0.0,
     gamma=0.9,
     half_life=float("inf"),
