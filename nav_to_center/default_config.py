@@ -3,7 +3,6 @@ import argparse
 from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
 
 cfg = argparse.Namespace(
-    bottleneck="gsm",
     bottleneck_temperature=1.5,
     bottleneck_hard=False,
     pre_arch=[0x20, 0x20],

@@ -51,20 +51,12 @@ class BottleneckExtractor(nn.Module):
 
         self.temp = net_arch["temp"]
         self.bottleneck_hard = net_arch["bottleneck_hard"]
-        if net_arch["bottleneck"] == "none":
-            self.bottleneck: Callable = torch.sigmoid
-            # self.bottleneck: Callable = lambda x: x
-            # self.bottleneck: Callable = torch.relu
-        elif net_arch["bottleneck"] in ("sm", "softmax"):
-            # self.bottleneck: Callable = torch.sigmoid
-            self.bottleneck = lambda x: nn.functional.softmax(x / self.temp, dim=-1)
-        elif net_arch["bottleneck"] in ("gsm", "gumbel-softmax"):
-            self.bottleneck = partial(
-                nn.functional.gumbel_softmax,
-                tau=self.temp,
-                hard=self.bottleneck_hard,
-                dim=-1,
-            )
+        self.bottleneck = partial(
+            nn.functional.gumbel_softmax,
+            tau=self.temp,
+            hard=self.bottleneck_hard,
+            dim=-1,
+        )
 
         post_arch = [x for x in net_arch["post_arch"]]
         post_arch.insert(0, pre_arch[-1])

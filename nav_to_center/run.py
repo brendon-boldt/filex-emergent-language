@@ -194,10 +194,10 @@ def collect_metrics(
     successes = 0.0
     trajs: List[List] = []
     # n_episodes = 0
-    # TODO
+    # TODO Rename n_episodes
     n_episodes = eval_steps
     n_steps = 0
-    discretize = cfg.bottleneck != "none"
+    discretize = True
 
     g_rad = env.goal_radius / env.world_radius
     lo = int(np.ceil(n_episodes * g_rad ** 2))

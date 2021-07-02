@@ -100,7 +100,6 @@ def make_policy_kwargs(cfg: Namespace) -> gym.Env:
         #     "act": cfg.policy_activation,
         # },
         "net_arch": {
-            "bottleneck": cfg.bottleneck,
             "bottleneck_hard": cfg.bottleneck_hard,
             "pre_arch": cfg.pre_arch,
             "post_arch": cfg.post_arch,
