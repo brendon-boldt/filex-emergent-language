@@ -19,7 +19,6 @@ cfg = argparse.Namespace(
     learning_rate=3e-3,
     save_all_checkpoints=False,
     init_model_path=None,
-    obs_type="vector",
     goal_radius=1.0,
     world_radius=9.0,
     # TODO Rename this since it is confusing

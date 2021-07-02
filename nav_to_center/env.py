@@ -1,4 +1,4 @@
-from typing import Tuple, Any, Dict, Union, cast, Optional
+from typing import Tuple, Any, Dict
 
 import gym  # type: ignore
 from gym import spaces
@@ -23,7 +23,6 @@ class NavToCenter(gym.Env):
     def __init__(
         self,
         *,
-        obs_type: str,
         is_eval: bool,
         goal_radius: float,
         world_radius: float,
@@ -44,17 +43,8 @@ class NavToCenter(gym.Env):
 
         self.max_steps = int(self.world_radius * self.max_step_scale)
 
-        assert obs_type in ("vector", "direction", "both")
-        self.obs_type = obs_type
-
-        # TODO Add different distribution
-        # TODO Add n-dimensional
-        if self.obs_type == "both":
-            obs_shape = (4,)
-        else:
-            obs_shape = (2,)
         self.observation_space = spaces.Box(
-            low=-1.0, high=1.0, shape=obs_shape, dtype=np.float32
+            low=-1.0, high=1.0, shape=(2,), dtype=np.float32
         )
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(2,))
 
@@ -82,17 +72,7 @@ class NavToCenter(gym.Env):
         self.location += action
 
     def get_observation(self) -> np.ndarray:
-        direction = -self.location / get_norm(self.location)
-        vector = -self.location
-        if self.obs_type == "direction":
-            # Observation should never have norm 0 since it would be at the goal
-            return direction
-        elif self.obs_type == "vector":
-            return vector
-        elif self.obs_type == "both":
-            return np.concatenate([direction, vector])
-        else:
-            raise NotImplementedError()
+        return -self.location
 
     def _get_step_result(self, action: np.ndarray) -> StepResult:
         info: Dict[str, Any] = {}

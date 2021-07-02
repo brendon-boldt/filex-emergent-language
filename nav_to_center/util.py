@@ -84,7 +84,6 @@ def make_env_kwargs(cfg: Namespace) -> Dict:
         "half_life": cfg.half_life,
         "goal_radius": cfg.goal_radius,
         "world_radius": cfg.world_radius,
-        "obs_type": cfg.obs_type,
         "max_step_scale": cfg.max_step_scale,
     }
 

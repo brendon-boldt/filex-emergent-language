@@ -56,7 +56,6 @@ def run_optimal_agents() -> None:
         "is_eval": True,
         "single_step": False,
         "world_radius": 9.0,
-        "obs_type": "vector",
     }
     new_env = lambda: env.NavToCenter(**env_kwargs)
     results = Parallel(n_jobs=20)(
