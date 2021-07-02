@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, List, Tuple, Dict
 import argparse
 from argparse import Namespace
 from pathlib import Path
@@ -7,9 +7,9 @@ import numpy as np  # type: ignore
 from joblib import Parallel, delayed  # type: ignore
 import pandas as pd  # type: ignore
 
-from default_config import cfg as _cfg
-from run import make_env_kwargs
-import env
+from .default_config import cfg as _cfg
+from .util import make_env_kwargs
+from . import env
 
 rng = np.random.default_rng()
 
@@ -51,7 +51,7 @@ def test_policy(env: Any, n: int, samples: int = 10_000) -> Tuple:
 
 
 def run_optimal_agents() -> None:
-    env_kwargs = {
+    env_kwargs: Dict[str, Any] = {
         **make_env_kwargs(_cfg),
         "is_eval": True,
         "single_step": False,

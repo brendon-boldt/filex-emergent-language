@@ -17,7 +17,7 @@ from stable_baselines3.common.vec_env import (
 )
 from torch.utils.tensorboard import SummaryWriter
 
-import util
+from . import util
 
 
 class LoggingCallback(EventCallback):

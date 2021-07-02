@@ -4,16 +4,16 @@ import env  # type: ignore
 
 def generate_configs() -> Iterator[Dict]:
     base = {
-        "total_timesteps": 40_000,
+        "total_timesteps": 100_000,
         "eval_freq": 5_000,
         "reward_scale": 1.0,
     }
-    n = 100
-    hi = 0
-    lo = -4
+    n = 120
+    hi = 4
+    lo = 12
     for i in range(n):
-        x = 10 ** (lo + (hi - lo) * i / (n-1))
+        x = 2 ** (lo + (hi - lo) * i / (n - 1))
         yield {
-            'rs_multiplier': x,
+            "pre_arch": [0x20, int(x)],
             **base,
         }

@@ -10,8 +10,8 @@ import analyze  # type: ignore
 
 def main(args, path: Path) -> None:
     df = pd.read_csv(path / "data.csv").fillna("None")
-    df = df[df['success_rate'] >= 0.5]
-    df['rs_multiplier'] = np.log10(df['rs_multiplier'])
+    df = df[df["success_rate"] >= 0.5]
+    df["rs_multiplier"] = np.log10(df["rs_multiplier"])
     groups = [
         "rs_multiplier",
     ]
@@ -21,7 +21,7 @@ def main(args, path: Path) -> None:
     table = grouped[fields].mean().round(2)
     # table_var = (grouped[fields].std() / grouped["argmax"].count().mean() ** 0.5).round(
     # table_var = (grouped[fields].std()).round(2)
-    table_var = (grouped[fields].count())
+    table_var = grouped[fields].count()
 
     df["perf"] = -df.steps
     filtered = df
@@ -36,13 +36,12 @@ def main(args, path: Path) -> None:
 
     # table = table.sort_values('pe')
 
-
     from matplotlib import pyplot as plt  # type: ignore
-    plt.scatter(df[groups[0]], df['argmax'])
-    # plt.xscale('log')
-    plt.savefig(path / 'group_vs_entropy.png')
-    plt.close()
 
+    plt.scatter(df[groups[0]], df["argmax"])
+    # plt.xscale('log')
+    plt.savefig(path / "group_vs_entropy.png")
+    plt.close()
 
     if args.latex:
         print(analyze.to_latex(table))

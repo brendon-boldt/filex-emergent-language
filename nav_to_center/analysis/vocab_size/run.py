@@ -10,10 +10,10 @@ import analyze  # type: ignore
 
 def main(args, path: Path) -> None:
     df = pd.read_csv(path / "data.csv").fillna("None")
-    df = df[df['success_rate'] >= 0.5]
-    df['bottleneck_temperature'] = np.log10(df['bottleneck_temperature'])
+    df = df[df["success_rate"] >= 0.5]
+    df["vocab_size"] = np.log2(df["pre_arch"].apply(lambda x: eval(x)[1]))
     groups = [
-        "bottleneck_temperature",
+        "vocab_size",
     ]
     grouped = df.groupby(groups)
 
@@ -27,8 +27,8 @@ def main(args, path: Path) -> None:
         print(f"{pr[0]:+.2f}/{pr[1]:.2f}")
     print()
 
-
     from matplotlib import pyplot as plt  # type: ignore
-    plt.scatter(df[groups[0]], df['argmax'])
-    plt.savefig(path / 'group_vs_entropy.png')
+
+    plt.scatter(df[groups[0]], df["argmax"])
+    plt.savefig(path / "group_vs_entropy.png")
     plt.close()

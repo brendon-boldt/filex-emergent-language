@@ -16,7 +16,7 @@ from scipy.interpolate import CubicSpline  # type: ignore
 from scipy.optimize import newton  # type: ignore
 import torch
 
-import util
+from . import util
 
 
 def to_latex(df: pd.DataFrame) -> str:

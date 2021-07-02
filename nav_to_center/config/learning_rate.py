@@ -9,11 +9,11 @@ def generate_configs() -> Iterator[Dict]:
         "reward_scale": 1.0,
     }
     n = 40
-    hi = 1
-    lo = -1
+    hi = -1
+    lo = -4
     for i in range(n):
-        x = 2 ** (lo + (hi - lo) * i / (n-1))
+        x = 10 ** (lo + (hi - lo) * i / (n - 1))
         yield {
-            'bottleneck_temperature': x,
+            "learning_rate": x,
             **base,
         }

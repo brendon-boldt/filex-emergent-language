@@ -27,11 +27,11 @@ from scipy.interpolate import CubicSpline  # type: ignore
 from stable_baselines3.common.callbacks import EvalCallback
 from PIL import Image  # type: ignore
 
-import nn
-import env
-from callback import LoggingCallback
-import util
-from default_config import cfg as _cfg
+from . import nn
+from . import env
+from .callback import LoggingCallback
+from . import util
+from .default_config import cfg as _cfg
 
 
 def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:

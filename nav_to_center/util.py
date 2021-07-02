@@ -7,8 +7,8 @@ import torch
 import gym  # type: ignore
 from stable_baselines3 import PPO  # type: ignore
 
-import nn
-import env
+from . import nn
+from . import env
 
 
 def _xlx(x: float) -> float:

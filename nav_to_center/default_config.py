@@ -2,8 +2,6 @@ import argparse
 
 from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
 
-import env as E
-
 cfg = argparse.Namespace(
     bottleneck="gsm",
     bottleneck_temperature=1.5,
