@@ -28,7 +28,6 @@ class NavToCenter(gym.Env):
         world_radius: float,
         max_step_scale: float,
         rs_multiplier: float,
-        reward_scale: float,
         **kwargs,
     ) -> None:
         super(self.__class__, self).__init__()
@@ -36,7 +35,6 @@ class NavToCenter(gym.Env):
         self.world_radius = world_radius
         self.is_eval = is_eval
         self.max_step_scale = max_step_scale
-        self.reward_scale = reward_scale
         self.rs_multiplier = rs_multiplier
 
         self.max_steps = int(self.world_radius * self.max_step_scale)

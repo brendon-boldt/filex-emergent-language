@@ -25,6 +25,5 @@ cfg = argparse.Namespace(
     max_step_scale=3.0,
     entropy_coef=0.0,
     gamma=0.9,
-    reward_scale=0.1,
     rs_multiplier=0.0,
 )

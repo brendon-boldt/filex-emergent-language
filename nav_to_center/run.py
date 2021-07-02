@@ -102,8 +102,8 @@ def patch_old_configs(cfg: Namespace) -> Namespace:
 
     Example
     ```
-    if not hasattr(cfg, "reward_scale"):
-        cfg.reward_scale = 0.1
+    if not hasattr(cfg, "gamma"):
+        cfg.gamma = 0.9
     ```
 
     """
