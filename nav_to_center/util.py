@@ -81,7 +81,6 @@ def make_env_kwargs(cfg: Namespace) -> Dict:
     return {
         "rs_multiplier": cfg.rs_multiplier,
         "reward_scale": cfg.reward_scale,
-        "half_life": cfg.half_life,
         "goal_radius": cfg.goal_radius,
         "world_radius": cfg.world_radius,
         "max_step_scale": cfg.max_step_scale,

@@ -27,7 +27,6 @@ class NavToCenter(gym.Env):
         goal_radius: float,
         world_radius: float,
         max_step_scale: float,
-        half_life: float,
         rs_multiplier: float,
         reward_scale: float,
         **kwargs,
@@ -37,7 +36,6 @@ class NavToCenter(gym.Env):
         self.world_radius = world_radius
         self.is_eval = is_eval
         self.max_step_scale = max_step_scale
-        self.half_life = half_life
         self.reward_scale = reward_scale
         self.rs_multiplier = rs_multiplier
 
@@ -81,9 +79,6 @@ class NavToCenter(gym.Env):
 
         at_goal = get_norm(self.location) <= self.goal_radius / self.world_radius
         if (self.num_steps > 0 and at_goal) or self.num_steps > self.max_steps:
-            self.stop = True
-
-        if not self.is_eval and rng.random() > 2 ** (-1 / self.half_life):
             self.stop = True
 
         prev_vec = action - self.location
