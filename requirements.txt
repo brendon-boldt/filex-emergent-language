@@ -1,8 +1,8 @@
 gym==0.17.2
 numpy
-stable-baselines3
-torch
+stable-baselines3==0.8.0
+torch==1.6.0
 tensorboard
 joblib
 tqdm
-pandas
+pandas==1.1.2
