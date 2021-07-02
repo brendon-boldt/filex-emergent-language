@@ -1,40 +1,27 @@
-import sys
-from typing import Any, Tuple, List, Callable, Iterator, Union, Dict, Optional
+from typing import Any, Tuple, List, Iterator, Union, Dict, Optional
 import argparse
 from argparse import Namespace
 from pathlib import Path
 import pickle as pkl
-from itertools import chain
 import importlib
 import shutil
 import uuid
 
-import gym  # type: ignore
-from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
-from stable_baselines3.common.vec_env import (
-    SubprocVecEnv,
-    VecTransposeImage,
-    DummyVecEnv,
-)  # type: ignore
-from stable_baselines3.common.utils import set_random_seed  # type: ignore
+from stable_baselines3.common.vec_env import DummyVecEnv  # type: ignore
 import torch
 import numpy as np  # type: ignore
 from torch.utils.tensorboard import SummaryWriter
 from joblib import Parallel, delayed  # type: ignore
 from tqdm import tqdm  # type: ignore
 import pandas as pd  # type: ignore
-from scipy.interpolate import CubicSpline  # type: ignore
-from stable_baselines3.common.callbacks import EvalCallback
-from PIL import Image  # type: ignore
 
-from . import nn
 from . import env
 from .callback import LoggingCallback
 from . import util
 from .default_config import cfg as _cfg
 
 
-def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
+def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     log_dir = base_dir / f"run-{idx}"
     if (log_dir / "completed").exists():
         return
@@ -68,12 +55,12 @@ def do_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     (log_dir / "completed").open("w")
 
 
-def run_trials(
+def execute_configuration(
     base_dir: Path, cfg: Namespace, name_props: List[str], num_trials: int
 ) -> Iterator[Any]:
     name = "_".join(str(getattr(cfg, prop)).replace("/", ",") for prop in name_props)
     log_dir = base_dir / name
-    return (delayed(do_run)(log_dir, cfg, i) for i in range(num_trials))
+    return (delayed(execute_run)(log_dir, cfg, i) for i in range(num_trials))
 
 
 def run_experiments(
@@ -88,7 +75,9 @@ def run_experiments(
         for config in mod.generate_configs():
             final_config = {**vars(_cfg), **config}
             cfg = Namespace(**final_config)
-            jobs.extend(run_trials(out_path, cfg, list(config.keys()), num_trials))
+            jobs.extend(
+                execute_configuration(out_path, cfg, list(config.keys()), num_trials)
+            )
 
     if len(jobs) == 1 or n_jobs == 1:
         for j in jobs:
@@ -123,46 +112,6 @@ def get_one_hot_vectors(policy: Any) -> np.ndarray:
     return np.array(_data)
 
 
-def is_border(m, i, j) -> bool:
-    if i % 2 and m[(i - 1) // 2, j // 2] != m[(i + 1) // 2, j // 2]:
-        return True
-    elif j % 2 and m[i // 2, (j - 1) // 2] != m[i // 2, (j + 1) // 2]:
-        return True
-    return False
-
-
-def get_lexicon_map(mlp_extractor: torch.nn.Module) -> None:
-    n_divs = 40
-    m = np.zeros([n_divs + 1] * 2, dtype=np.int64)
-    bound = 1.0
-    print()
-    print()
-    for i in range(n_divs + 1):
-        for j in range(n_divs + 1):
-            with torch.no_grad():
-                inp = torch.tensor(
-                    [-bound + 2 * bound * i / n_divs, -bound + 2 * bound * j / n_divs]
-                )
-                m[i, j] = mlp_extractor.pre_net(inp).argmax().item()  # type: ignore
-    for i in range(2 * n_divs - 1):
-        for j in range(2 * n_divs - 1):
-            c = "  "
-            if not i % 2 and not j % 2:
-                c = f"{m[i//2,j//2]:>2d}"
-            elif i % 2 and j % 2:
-                if sum(
-                    [
-                        is_border(m, i + x, j + y)
-                        for x, y in [(-1, 0), (0, -1), (1, 0), (0, 1)]
-                    ]
-                ):
-                    c = "██"
-            elif is_border(m, i, j):
-                c = "██"
-            print(c, end="")
-        print()
-
-
 def collect_metrics(
     model_path: Path,
     out_path: Path,
@@ -176,7 +125,7 @@ def collect_metrics(
         "is_eval": True,
         "world_radius": 9.0,
     }
-    env = env.NavToCenter(**env_kwargs)
+    environment = env.NavToCenter(**env_kwargs)
     model = util.make_model(cfg)
     if model is None:
         print(f'Could not restore model "{cfg.init_model_path}"')
@@ -193,23 +142,23 @@ def collect_metrics(
     steps_values = []
     successes = 0.0
     trajs: List[List] = []
-    # n_episodes = 0
-    # TODO Rename n_episodes
-    n_episodes = eval_steps
+    n_episodes = 0
     n_steps = 0
     discretize = True
 
-    g_rad = env.goal_radius / env.world_radius
-    lo = int(np.ceil(n_episodes * g_rad ** 2))
-    hi = int(np.ceil(n_episodes / (1 - g_rad ** 2)))
+    g_rad = environment.goal_radius / environment.world_radius
+    lo = int(np.ceil(eval_steps * g_rad ** 2))
+    hi = int(np.ceil(eval_steps / (1 - g_rad ** 2)))
 
-    # while n_steps < eval_steps:
+    # The index is passed to the initialization. We start with lo so that that
+    # the agent is not intialized in the center.
+    # TODO Fix initialization so we don't have to compute lo manually.
     for i in range(lo, hi):
         n_episodes += 1
-        env.reset()
-        env.fib_disc_init(i, hi)
+        environment.reset()
+        environment.fib_disc_init(i, hi)
         ep_len, bns, success, traj = util.eval_episode(
-            policy, mlp_extractor, env, discretize
+            policy, mlp_extractor, environment, discretize
         )
         n_steps += ep_len
         successes += success
@@ -292,15 +241,6 @@ def aggregate_results(
     df.to_csv(out_dir / "data.csv", index=False)
 
 
-def generate_spline_data(path: Path) -> None:
-    df = pd.read_csv(path, header=None)
-    df[0] = np.log2(df[0])
-    cs = CubicSpline(df[0], df[1])
-    interps = [[x, cs(x)] for x in np.arange(df[0].min(), df[0].max(), 0.02)]
-    df = pd.concat([df, pd.DataFrame(interps)])
-    df.to_csv("optimal-interp.csv", header=None)
-
-
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", type=str)
@@ -308,7 +248,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--num_trials", type=int, default=1)
     parser.add_argument("--out_dir", "-o", type=str, default=".")
     parser.add_argument("--progression", action="store_true")
-    parser.add_argument("--target_ts", type=int, default=None)
+    parser.add_argument("--target_timestep", type=int, default=None)
     parser.add_argument("--eval_steps", type=int, default=10_000)
     parser.add_argument("--include_csv", type=str, action="append")
     parser.add_argument("-j", type=int, default=1)
@@ -322,19 +262,17 @@ def main() -> None:
         args.include_csv = []
 
     if args.command == "eval":
-        if args.target_ts is None:
-            raise ValueError("Please set --target_ts")
+        if args.target_timestep is None:
+            raise ValueError("Please set --target_timestep")
         aggregate_results(
             args.targets,
             args.out_dir,
             args.j,
             args.progression,
-            args.target_ts,
+            args.target_timestep,
             args.eval_steps,
             args.include_csv,
         )
-    elif args.command == "spline":
-        generate_spline_data(args.targets[0])
     elif args.command == "run":
         run_experiments(args.targets, args.num_trials, args.j)
     else:
