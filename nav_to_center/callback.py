@@ -104,9 +104,8 @@ class LoggingCallback(EventCallback):
             env = self.eval_env.envs[0]
             while sum(episode_lengths) < self.n_eval_episodes:
                 env.reset()
-                ep_len, bns, success, _traj = util.eval_episode(
+                ep_len, bns, success = util.eval_episode(
                     self.model.policy,
-                    # self.model.policy.features_extractor,
                     self.model.policy.mlp_extractor,
                     env,
                     self.cfg != "none",

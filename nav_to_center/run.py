@@ -157,31 +157,16 @@ def collect_metrics(
         n_episodes += 1
         environment.reset()
         environment.fib_disc_init(i, hi)
-        ep_len, bns, success, traj = util.eval_episode(
+        ep_len, bns, success = util.eval_episode(
             policy, mlp_extractor, environment, discretize
         )
         n_steps += ep_len
         successes += success
         steps_values.append(ep_len)
         bottleneck_values.extend(bns)
-        trajs.extend(traj)
     np_bn_values = np.stack(bottleneck_values)
     entropy = util.get_entropy(np_bn_values)
     sample_id = str(uuid.uuid4())
-
-    trajectories_dir = out_path / "trajectories"
-    if not trajectories_dir.exists():
-        trajectories_dir.mkdir()
-    select = lambda x: np.array([t[x] for t in trajs])
-    np.savez(
-        trajectories_dir / (sample_id + ".npz"),
-        t=select(0),
-        s=select(1),
-        a=select(2),
-        r=select(3),
-        s_next=select(4),
-        done=select(5),
-    )
 
     contents = {
         "path": str(model_path),

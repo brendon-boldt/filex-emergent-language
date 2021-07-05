@@ -26,7 +26,7 @@ def get_entropy(o: np.ndarray) -> np.ndarray:
     return xlx(np.eye(o.shape[-1])[o.argmax(-1)].mean(0)).sum(0)
 
 
-def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float, List]:
+def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float]:
     obs = env.get_observation()
     done = False
     steps = 0
@@ -39,7 +39,6 @@ def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float, List]:
             tau=1e-20,
         )
     total_reward = 0.0
-    traj: List[List] = []
     while not done:
         obs_tensor = torch.Tensor(obs)
         with torch.no_grad():
@@ -49,17 +48,11 @@ def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float, List]:
         bns.append(bn)
         prev_loc = env.location.copy()
         obs, reward, done, info = env.step(act)
-        traj.append(
-            [steps, prev_loc, act, reward, env.location.copy(), info["at_goal"]]
-        )
         total_reward += reward
         steps += 1
     policy.mlp_extractor.bottleneck = original_bottlenck
-    if hasattr(env, "use_reward") and not env.use_reward:
-        pass
-    else:
-        total_reward = float(info["at_goal"])
-    return steps, bns, total_reward, traj
+    total_reward = float(info["at_goal"])
+    return steps, bns, total_reward
 
 
 def make_env_kwargs(cfg: Namespace) -> Dict:
