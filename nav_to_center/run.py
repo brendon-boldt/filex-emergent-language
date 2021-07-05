@@ -166,7 +166,7 @@ def collect_metrics(
         bottleneck_values.extend(bns)
         trajs.extend(traj)
     np_bn_values = np.stack(bottleneck_values)
-    entropies = util.get_metrics(np_bn_values)
+    entropy = util.get_entropy(np_bn_values)
     sample_id = str(uuid.uuid4())
 
     trajectories_dir = out_path / "trajectories"
@@ -188,7 +188,7 @@ def collect_metrics(
         "uuid": sample_id,
         "steps": np.mean(steps_values),
         "success_rate": successes / n_episodes,
-        **entropies,
+        "entropy": entropy,
         "discretize": discretize,
         "usages": np_bn_values.mean(0).tolist(),
         "vectors": vectors.tolist(),

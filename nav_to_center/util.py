@@ -1,4 +1,4 @@
-from typing import Tuple, List, Dict, Any
+from typing import Tuple, List, Dict, Any, Callable
 from functools import partial
 from argparse import Namespace
 
@@ -21,14 +21,9 @@ def _xlx(x: float) -> float:
 xlx = np.vectorize(_xlx)
 
 
-def get_metrics(o: np.ndarray) -> Dict[str, np.ndarray]:
-    """Calculate entropies based on network outputs."""
-    return {
-        "argmax": xlx(np.eye(o.shape[-1])[o.argmax(-1)].mean(0)).sum(0),
-        "fractional": xlx(o.mean(0)).sum(0),
-        "linf": o.max(-1).mean(0),
-        "individual": xlx(o).sum(-1).mean(0),
-    }
+def get_entropy(o: np.ndarray) -> np.ndarray:
+    """Calculate bits of entropy."""
+    return xlx(np.eye(o.shape[-1])[o.argmax(-1)].mean(0)).sum(0)
 
 
 def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float, List]:
@@ -67,16 +62,6 @@ def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float, List]:
     return steps, bns, total_reward, traj
 
 
-def make_env(env_constructor, rank, seed=0):
-    def _init():
-        env = env_constructor()
-        env.seed(seed + rank)
-        return env
-
-    set_random_seed(seed)
-    return _init
-
-
 def make_env_kwargs(cfg: Namespace) -> Dict:
     return {
         "rs_multiplier": cfg.rs_multiplier,
@@ -86,19 +71,8 @@ def make_env_kwargs(cfg: Namespace) -> Dict:
     }
 
 
-def make_policy_kwargs(cfg: Namespace) -> gym.Env:
+def _make_policy_kwargs(cfg: Namespace) -> gym.Env:
     return {
-        # "features_extractor_class": nn.BottleneckPolicy,
-        # "features_extractor_kwargs": {
-        #     "out_size": cfg.fe_out_size,
-        #     "ratio": cfg.fe_out_ratio,
-        #     "bottleneck": cfg.bottleneck,
-        #     "bottleneck_hard": cfg.bottleneck_hard,
-        #     "pre_arch": cfg.pre_arch,
-        #     "post_arch": cfg.post_arch,
-        #     "temp": cfg.bottleneck_temperature,
-        #     "act": cfg.policy_activation,
-        # },
         "net_arch": {
             "bottleneck_hard": cfg.bottleneck_hard,
             "pre_arch": cfg.pre_arch,
@@ -112,7 +86,7 @@ def make_policy_kwargs(cfg: Namespace) -> gym.Env:
 def make_model(cfg: Namespace) -> Any:
     env_kwargs = make_env_kwargs(cfg)
     env = env.NavToCenter(is_eval=False, **env_kwargs)
-    policy_kwargs = make_policy_kwargs(cfg)
+    policy_kwargs = _make_policy_kwargs(cfg)
     alg_kwargs = {
         "n_steps": cfg.n_steps,
         "batch_size": cfg.batch_size,
@@ -125,9 +99,6 @@ def make_model(cfg: Namespace) -> Any:
     }
     if cfg.alg != PPO:
         del alg_kwargs["n_steps"]
-        # del alg_kwargs["batch_size"]
-        # del alg_kwargs["learning_rate"]
-        # alg_kwargs["n_episodes_rollout"] = 100
     model = cfg.alg(
         nn.MixedPolicy,
         env,

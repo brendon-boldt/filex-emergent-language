@@ -116,10 +116,8 @@ class LoggingCallback(EventCallback):
                 bn_activations.extend(bns)
             bn_activations = np.array(bn_activations)
 
-            entropies = util.get_metrics(bn_activations)
-            self.writer.add_scalar(
-                "entropy/argmax", entropies["argmax"], self.num_timesteps
-            )
+            entropy = util.get_entropy(bn_activations)
+            self.writer.add_scalar("entropy", entropy, self.num_timesteps)
 
             if self.log_path is not None:
                 self.evaluations_timesteps.append(self.num_timesteps)

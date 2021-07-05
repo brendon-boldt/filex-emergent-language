@@ -1,11 +1,8 @@
 from functools import partial
-from itertools import zip_longest
 from typing import Dict, List, Tuple, Type, Union, Callable, Any, cast
 
-from stable_baselines3.common.utils import get_device
 from stable_baselines3.common.policies import ActorCriticPolicy  # type: ignore
 import numpy as np  # type: ignore
-import gym  # type: ignore
 from torch import nn
 import torch
 import torch as th
@@ -13,10 +10,8 @@ from stable_baselines3.common.distributions import (
     BernoulliDistribution,
     CategoricalDistribution,
     DiagGaussianDistribution,
-    Distribution,
     MultiCategoricalDistribution,
     StateDependentNoiseDistribution,
-    make_proba_distribution,
 )
 from stable_baselines3.common.policies import create_sde_features_extractor
 
@@ -33,7 +28,6 @@ class BottleneckExtractor(nn.Module):
 
         # We need to make a copy of this bebcause stable baselines reuses references
         pre_arch = [x for x in net_arch["pre_arch"]]
-        # pre_arch.insert(0, obs_space.shape[0])
         pre_arch.insert(0, feature_dim)
         pre_layers: List[nn.Module] = []
         for i in range(len(pre_arch) - 1):
@@ -71,8 +65,6 @@ class BottleneckExtractor(nn.Module):
         self.latent_dim_pi = post_arch[-1]
         self.latent_dim_vf = pre_arch[-1]
 
-        # self.features_dim = post_arch[-1]
-
     def forward(self, features: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         pi_x = self.pre_net(features)
         pi_x = self.bottleneck(pi_x)
@@ -86,6 +78,7 @@ class BottleneckExtractor(nn.Module):
         return x
 
 
+# This class needs to be redefined from stable_baselines3 in order to insert the BottleneckExtractor
 class MixedPolicy(ActorCriticPolicy):
     def _build(self, lr_schedule: Callable[[float], float]) -> None:
         """
@@ -97,9 +90,6 @@ class MixedPolicy(ActorCriticPolicy):
         # Note: If net_arch is None and some features extractor is used,
         #       net_arch here is an empty list and mlp_extractor does not
         #       really contain any layers (acts like an identity module).
-        # self.mlp_extractor = MlpExtractor(
-        #     self.features_dim, net_arch=self.net_arch, activation_fn=self.activation_fn, device=self.device
-        # )
         bnx = BottleneckExtractor(
             self.features_dim,
             net_arch=cast(Any, self.net_arch),
