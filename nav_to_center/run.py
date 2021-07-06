@@ -36,11 +36,9 @@ def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     env_eval = DummyVecEnv([lambda: env.NavToCenter(is_eval=True, **env_kwargs)])
     logging_callback = LoggingCallback(
         eval_env=env_eval,
-        n_eval_episodes=cfg.eval_steps,
+        n_eval_steps=cfg.eval_steps,
         eval_freq=cfg.eval_freq,
         writer=writer,
-        verbose=0,
-        save_all_checkpoints=cfg.save_all_checkpoints,
         cfg=cfg,
     )
     model = util.make_model(cfg)
