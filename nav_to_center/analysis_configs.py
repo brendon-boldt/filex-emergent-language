@@ -6,7 +6,8 @@ configs: Dict[str, Dict[str, Any]] = {
         "path": "results/temperature",
         "type": "correlation",
         "ind_var": "bottleneck_temperature_log",
-        "dep_var": "argmax",
+        "dep_var": "entropy",
+        "groups": ["rs_multiplier"],
     }
 }
 

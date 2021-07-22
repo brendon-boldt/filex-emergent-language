@@ -8,7 +8,7 @@ import gym  # type: ignore
 from stable_baselines3 import PPO  # type: ignore
 
 from . import nn
-from . import env
+from . import env as E
 
 
 def _xlx(x: float) -> float:
@@ -78,7 +78,7 @@ def _make_policy_kwargs(cfg: Namespace) -> gym.Env:
 
 def make_model(cfg: Namespace) -> Any:
     env_kwargs = make_env_kwargs(cfg)
-    env = env.NavToCenter(is_eval=False, **env_kwargs)
+    env = E.NavToCenter(is_eval=False, **env_kwargs)
     policy_kwargs = _make_policy_kwargs(cfg)
     alg_kwargs = {
         "n_steps": cfg.n_steps,

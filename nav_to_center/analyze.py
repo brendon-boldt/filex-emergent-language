@@ -13,6 +13,7 @@ import pandas as pd  # type: ignore
 
 from . import analysis_configs
 
+
 def iter_groups(
     df: pd.DataFrame, groups: List[str], plot_shape: Optional[Tuple[int, int]]
 ) -> Iterator[Tuple[List, pd.DataFrame, matplotlib.axes.Axes]]:
@@ -47,23 +48,55 @@ def iter_groups(
 
 
 def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
-    ind_var = cfg['ind_var']
-    dep_var = cfg['dep_var']
-    result = linregress(df[ind_var], df[dep_var])
-    print(result)
+    ind_var = cfg["ind_var"]
+    dep_var = cfg["dep_var"]
 
-    plt.scatter(df[ind_var], df[dep_var])
-    plt.savefig(cfg['path'] / f"{ind_var}_vs_{dep_var}.png")
-    plt.close()
+    def do_group(df: pd.DataFrame, name: str) -> None:
+        result = linregress(df[ind_var], df[dep_var])
+        print(f"Group: {name}")
+        print(result)
+        print()
+
+        fig = plt.figure()
+        ax = fig.add_axes([0, 0, 1, 1])
+        ax.scatter(df[ind_var], df[dep_var])
+        if dep_var == "entropy":
+            ax.set_ylabel("Entropy (bits)")
+        if ind_var == "bottleneck_temperature_log":
+            ax.set_xlabel("Bottleneck Temperature")
+            ticks = [0.5, 0.75, 1, 1.5, 2]
+            ax.set_xticks([np.log2(x) for x in ticks])
+            ax.set_xticklabels(ticks)
+            ax.set_ylim(1.5, 5)
+        raw_fn = f"{ind_var}-{dep_var}-{name}.png"
+        plt.savefig(
+            cfg["path"] / raw_fn.replace(".", ","),
+            bbox_inches="tight",
+        )
+        plt.close()
+
+    if "groups" in cfg:
+        for k, v in df.groupby(cfg["groups"]).indices.items():
+            if not isinstance(k, tuple):
+                kt: Tuple = (k,)
+            else:
+                kt = k
+            name = ",".join(cfg["groups"]) + "-" + ",".join(str(x) for x in kt)
+            do_group(df.iloc[v], name)
+    else:
+        do_group(df, "default")
+
 
 def preprocess_data(df: pd.DataFrame) -> None:
-    df['bottleneck_temperature_log'] = np.log2(df['bottleneck_temperature'])
+    df["bottleneck_temperature_log"] = np.log2(df["bottleneck_temperature"])
 
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
+    parser.add_argument("command", type=str)
     parser.add_argument("analysis", type=str)
     return parser.parse_args()
+
 
 def main() -> None:
     args = get_args()
@@ -74,14 +107,9 @@ def main() -> None:
 
     cfg = analysis_configs.configs[args.analysis]
 
-    data_path = Path(cfg['path'])
+    data_path = Path(cfg["path"])
     dataframe = pd.read_csv(data_path / "data.csv").fillna("None")
     preprocess_data(dataframe)
 
-    if cfg['type'] == 'correlation':
+    if cfg["type"] == "correlation":
         analyze_correlation(dataframe, cfg)
-
-
-
-if __name__ == "__main__":
-    main()

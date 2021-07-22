@@ -6,6 +6,7 @@ import pickle as pkl
 import importlib
 import shutil
 import uuid
+import re
 
 from stable_baselines3.common.vec_env import DummyVecEnv  # type: ignore
 import torch
@@ -189,14 +190,23 @@ def expand_paths(
     contents = {x for x in root.iterdir()}
     names = {x.name for x in contents}
     paths = []
-    target_fn = "best.pt" if target_ts is None else f"model-{target_ts}.pt"
     if progression:
         new_paths = sorted(
             root.glob("model*.pt"),
             key=lambda x: int(str(x).split("-")[-1].split(".")[0]),
         )
         paths.extend(new_paths)
-    elif len({target_fn, "config.pkl"} & names) == 2:
+    elif len({"completed", "config.pkl"} & names) == 2:
+        if target_ts is None:
+            max_ts = 0
+            for name in names:
+                mo = re.match(r"model-([0-9]+)\.pt", name)
+                if mo:
+                    ts = int(mo.group(1))
+                    if ts > max_ts:
+                        max_ts = ts
+            target_ts = max_ts
+        target_fn = f"model-{target_ts}.pt"
         paths.append(root / target_fn)
     paths.extend(x for c in contents for x in expand_paths(c, progression, target_ts))
     return paths
@@ -245,8 +255,6 @@ def main() -> None:
         args.include_csv = []
 
     if args.command == "eval":
-        if args.target_timestep is None:
-            raise ValueError("Please set --target_timestep")
         aggregate_results(
             args.targets,
             args.out_dir,
@@ -260,7 +268,3 @@ def main() -> None:
         run_experiments(args.targets, args.num_trials, args.j)
     else:
         raise ValueError(f"Command '{args.command}' not recognized.")
-
-
-if __name__ == "__main__":
-    main()
