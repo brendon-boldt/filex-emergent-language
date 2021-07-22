@@ -85,9 +85,7 @@ class LoggingCallback(EventCallback):
 
         if self.log_path is not None:
             self.evaluations_timesteps.append(self.num_timesteps)
-            self.evaluations_results.append(
-                sum(episode_rewards) / len(episode_rewards)
-            )
+            self.evaluations_results.append(sum(episode_rewards) / len(episode_rewards))
             self.evaluations_length.append(np.mean(episode_lengths))
             np.savez(
                 self.log_path / "data",
@@ -100,9 +98,7 @@ class LoggingCallback(EventCallback):
         mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(
             episode_lengths
         )
-        self.writer.add_scalar(
-            "mean_reward", float(mean_reward), self.num_timesteps
-        )
+        self.writer.add_scalar("mean_reward", float(mean_reward), self.num_timesteps)
         self.writer.add_scalar("mean_ep_length", mean_ep_length, self.num_timesteps)
         self.writer.add_scalar("rate", self.num_timesteps, self.num_timesteps)
         torch.save(
