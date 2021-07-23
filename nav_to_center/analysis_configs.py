@@ -8,7 +8,20 @@ configs: Dict[str, Dict[str, Any]] = {
         "ind_var": "bottleneck_temperature_log",
         "dep_var": "entropy",
         "groups": ["rs_multiplier"],
-    }
+    },
+    "corr_lr": {
+        "path": "results/learning_rate",
+        "type": "correlation",
+        "ind_var": "learning_rate_log",
+        "dep_var": "entropy",
+        "groups": ["rs_multiplier"],
+    },
+    "corr_sparsity": {
+        "path": "results/sparsity",
+        "type": "correlation",
+        "ind_var": "rs_multiplier_log",
+        "dep_var": "entropy",
+    },
 }
 
 for k in configs.keys():

@@ -68,6 +68,11 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
             ax.set_xticks([np.log2(x) for x in ticks])
             ax.set_xticklabels(ticks)
             ax.set_ylim(1.5, 5)
+        if ind_var == "rs_multiplier_log":
+            ax.set_xlabel("Reward Shaping Multiplier")
+            ticks = [1e-4, 1e-3, 1e-2, 1e-1, 1e0]
+            ax.set_xticks([np.log10(x) for x in ticks])
+            ax.set_xticklabels(ticks)
         raw_fn = f"{ind_var}-{dep_var}-{name}.png"
         plt.savefig(
             cfg["path"] / raw_fn.replace(".", ","),
@@ -88,7 +93,10 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
 
 
 def preprocess_data(df: pd.DataFrame) -> None:
+    df.drop(np.flatnonzero(df["success_rate"] < 1.0), inplace=True)
     df["bottleneck_temperature_log"] = np.log2(df["bottleneck_temperature"])
+    df["rs_multiplier_log"] = np.log10(df["rs_multiplier"])
+    df["learning_rate_log"] = np.log10(df["learning_rate"])
 
 
 def get_args() -> argparse.Namespace:

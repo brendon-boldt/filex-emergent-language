@@ -214,7 +214,6 @@ def expand_paths(
 
 def aggregate_results(
     path_strs: List[str],
-    out_dir: Path,
     n_jobs: int,
     progression: bool,
     target_ts: Optional[int],
@@ -222,6 +221,7 @@ def aggregate_results(
     df_concat_paths: List[Path],
 ) -> None:
     dfs_to_concat = [pd.read_csv(p) for p in df_concat_paths]
+    out_dir = Path("results") / Path(path_strs[0]).name
     if not out_dir.exists():
         out_dir.mkdir()
     paths = [x for p in path_strs for x in expand_paths(p, progression, target_ts)]
@@ -239,7 +239,6 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("command", type=str)
     parser.add_argument("targets", type=str, nargs="*")
     parser.add_argument("--num_trials", type=int, default=1)
-    parser.add_argument("--out_dir", "-o", type=str, default=".")
     parser.add_argument("--progression", action="store_true")
     parser.add_argument("--target_timestep", type=int, default=None)
     parser.add_argument("--eval_steps", type=int, default=10_000)
@@ -250,14 +249,12 @@ def get_args() -> argparse.Namespace:
 
 def main() -> None:
     args = get_args()
-    args.out_dir = Path(args.out_dir)
     if args.include_csv is None:
         args.include_csv = []
 
     if args.command == "eval":
         aggregate_results(
             args.targets,
-            args.out_dir,
             args.j,
             args.progression,
             args.target_timestep,
