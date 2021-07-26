@@ -16,6 +16,19 @@ configs: Dict[str, Dict[str, Any]] = {
         "dep_var": "entropy",
         "groups": ["rs_multiplier"],
     },
+    "low_lr": {
+        "path": "results/low_learning_rate",
+        "type": "correlation",
+        "ind_var": "learning_rate_log",
+        "dep_var": "entropy",
+    },
+    "corr_lexicon_size": {
+        "path": "results/lexicon_size",
+        "type": "correlation",
+        "ind_var": "lexicon_size_log",
+        "dep_var": "entropy",
+        "groups": ["rs_multiplier"],
+    },
     "corr_sparsity": {
         "path": "results/sparsity",
         "type": "correlation",

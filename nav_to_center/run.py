@@ -20,6 +20,7 @@ from . import env
 from .callback import LoggingCallback
 from . import util
 from .default_config import cfg as _cfg
+from . import experiment_configs
 
 
 def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
@@ -63,20 +64,16 @@ def execute_configuration(
 
 
 def run_experiments(
-    config_paths: List[str], num_trials: int, n_jobs: int, out_dir=Path("log")
+    exp_name: str, num_trials: int, n_jobs: int, out_dir=Path("log")
 ) -> None:
     jobs: List[Tuple] = []
-    for config_path in config_paths:
-        config_name = config_path.split("/")[-1][:-3]
-        out_path = out_dir / config_name
-        module_name = config_path.rstrip("/").replace("/", ".")[:-3]
-        mod: Any = importlib.import_module(module_name)
-        for config in mod.generate_configs():
-            final_config = {**vars(_cfg), **config}
-            cfg = Namespace(**final_config)
-            jobs.extend(
-                execute_configuration(out_path, cfg, list(config.keys()), num_trials)
-            )
+    out_path = out_dir / exp_name
+    for config in getattr(experiment_configs, exp_name)():
+        final_config = {**vars(_cfg), **config}
+        cfg = Namespace(**final_config)
+        jobs.extend(
+            execute_configuration(out_path, cfg, list(config.keys()), num_trials)
+        )
 
     if len(jobs) == 1 or n_jobs == 1:
         for j in jobs:
@@ -237,7 +234,7 @@ def aggregate_results(
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", type=str)
-    parser.add_argument("targets", type=str, nargs="*")
+    parser.add_argument("targets", type=str, nargs="+")
     parser.add_argument("--num_trials", type=int, default=1)
     parser.add_argument("--progression", action="store_true")
     parser.add_argument("--target_timestep", type=int, default=None)
@@ -262,6 +259,6 @@ def main() -> None:
             args.include_csv,
         )
     elif args.command == "run":
-        run_experiments(args.targets, args.num_trials, args.j)
+        run_experiments(args.targets[0], args.num_trials, args.j)
     else:
         raise ValueError(f"Command '{args.command}' not recognized.")
