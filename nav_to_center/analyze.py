@@ -1,7 +1,7 @@
 import argparse
 import importlib
 from pathlib import Path
-from typing import Any, List, Optional, Tuple, Iterator, Dict
+from typing import Any, List, Optional, Tuple, Iterator, Dict, Union
 from itertools import product
 import math
 
@@ -64,6 +64,7 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         fig = plt.figure(figsize=(2, 2))
         ax = fig.add_axes([0, 0, 1, 1])
         ax.scatter(df[ind_var], df[dep_var], s=0.5)
+        ticks: List[Union[int, float]]
         if dep_var == "entropy":
             # ax.set_ylabel("Entropy (bits)")
             ax.set_ylim(1.5, 5.1)
@@ -72,6 +73,9 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
             ax.set_ylim(2.9, 8.1)
             ax.plot([3, 8], [3, 8], color="gray", linewidth=1.0)
             ax.set_yticks([3, 4, 5, 6, 7, 8])
+            ticks = [8, 32, 128, 512]
+            ax.set_xticks([np.log2(x) for x in ticks])
+            ax.set_xticklabels(ticks)
         if ind_var == "learning_rate_log":
             ax.set_xlabel("Bottleneck Temperature")
             ticks = [1e-4, 1e-3, 1e-2, 1e-1]
