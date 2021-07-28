@@ -1,19 +1,9 @@
 from functools import partial
-from typing import Dict, List, Tuple, Type, Union, Callable, Any, cast
+from typing import Dict, List, Tuple, Type, Union, Any
 
 from stable_baselines3.common.policies import ActorCriticPolicy  # type: ignore
-import numpy as np  # type: ignore
-from torch import nn
+from torch import nn  # type: ignore
 import torch
-import torch as th
-from stable_baselines3.common.distributions import (
-    BernoulliDistribution,
-    CategoricalDistribution,
-    DiagGaussianDistribution,
-    MultiCategoricalDistribution,
-    StateDependentNoiseDistribution,
-)
-from stable_baselines3.common.policies import create_sde_features_extractor
 
 
 class BottleneckExtractor(nn.Module):
@@ -22,7 +12,7 @@ class BottleneckExtractor(nn.Module):
         feature_dim: int,
         net_arch: Dict[str, Any],
         activation_fn: Type[nn.Module],
-        device: Union[th.device, str] = "auto",
+        device: Union[torch.device, str] = "auto",
     ) -> None:
         super(self.__class__, self).__init__()
 
@@ -78,78 +68,13 @@ class BottleneckExtractor(nn.Module):
         return x
 
 
-# This class needs to be redefined from stable_baselines3 in order to insert the BottleneckExtractor
-class MixedPolicy(ActorCriticPolicy):
-    def _build(self, lr_schedule: Callable[[float], float]) -> None:
-        """
-        Create the networks and the optimizer.
-
-        :param lr_schedule: (Callable) Learning rate schedule
-            lr_schedule(1) is the initial learning rate
-        """
-        # Note: If net_arch is None and some features extractor is used,
-        #       net_arch here is an empty list and mlp_extractor does not
-        #       really contain any layers (acts like an identity module).
-        bnx = BottleneckExtractor(
+class BottleneckPolicy(ActorCriticPolicy):
+    # This class may need to be modified if Stable Baselines is updated
+    def _build_mlp_extractor(self) -> None:
+        # This overrides the default MLP extractor.
+        self.mlp_extractor = BottleneckExtractor(
             self.features_dim,
-            net_arch=cast(Any, self.net_arch),
+            net_arch=self.net_arch,
             activation_fn=self.activation_fn,
             device=self.device,
         )
-        self.mlp_extractor = cast(Any, bnx)
-
-        latent_dim_pi = self.mlp_extractor.latent_dim_pi
-
-        # Separate feature extractor for gSDE
-        if self.sde_net_arch is not None:
-            self.sde_features_extractor, latent_sde_dim = create_sde_features_extractor(  # type: ignore
-                self.features_dim, self.sde_net_arch, self.activation_fn
-            )
-
-        if isinstance(self.action_dist, DiagGaussianDistribution):
-            self.action_net, self.log_std = self.action_dist.proba_distribution_net(
-                latent_dim=latent_dim_pi, log_std_init=self.log_std_init
-            )
-        elif isinstance(self.action_dist, StateDependentNoiseDistribution):
-            latent_sde_dim = (
-                latent_dim_pi if self.sde_net_arch is None else latent_sde_dim
-            )
-            self.action_net, self.log_std = self.action_dist.proba_distribution_net(
-                latent_dim=latent_dim_pi,
-                latent_sde_dim=latent_sde_dim,
-                log_std_init=self.log_std_init,
-            )
-        elif isinstance(self.action_dist, CategoricalDistribution):
-            self.action_net = self.action_dist.proba_distribution_net(
-                latent_dim=latent_dim_pi
-            )
-        elif isinstance(self.action_dist, MultiCategoricalDistribution):
-            self.action_net = self.action_dist.proba_distribution_net(
-                latent_dim=latent_dim_pi
-            )
-        elif isinstance(self.action_dist, BernoulliDistribution):
-            self.action_net = self.action_dist.proba_distribution_net(
-                latent_dim=latent_dim_pi
-            )
-        else:
-            raise NotImplementedError(f"Unsupported distribution '{self.action_dist}'.")
-
-        self.value_net = nn.Linear(self.mlp_extractor.latent_dim_vf, 1)
-        # Init weights: use orthogonal initialization
-        # with small initial weight for the output
-        if self.ortho_init:
-            # TODO: check for features_extractor
-            # Values from stable-baselines.
-            # feature_extractor/mlp values are
-            # originally from openai/baselines (default gains/init_scales).
-            module_gains = {
-                self.features_extractor: np.sqrt(2),
-                self.mlp_extractor: np.sqrt(2),
-                self.action_net: 0.01,
-                self.value_net: 1,
-            }
-            for module, gain in module_gains.items():
-                module.apply(partial(self.init_weights, gain=gain))  # type: ignore
-
-        # Setup optimizer with initial learning rate
-        self.optimizer = self.optimizer_class(self.parameters(), lr=lr_schedule(1), **self.optimizer_kwargs)  # type: ignore

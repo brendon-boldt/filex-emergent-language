@@ -93,7 +93,7 @@ def make_model(cfg: Namespace) -> Any:
     if cfg.alg != PPO:
         del alg_kwargs["n_steps"]
     model = cfg.alg(
-        nn.MixedPolicy,
+        nn.BottleneckPolicy,
         env,
         **alg_kwargs,
     )
