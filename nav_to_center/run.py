@@ -220,7 +220,7 @@ def aggregate_results(
     dfs_to_concat = [pd.read_csv(p) for p in df_concat_paths]
     out_dir = Path("results") / Path(path_strs[0]).name
     if not out_dir.exists():
-        out_dir.mkdir()
+        out_dir.mkdir(parents=True)
     paths = [x for p in path_strs for x in expand_paths(p, progression, target_ts)]
     jobs = [delayed(collect_metrics)(p, out_dir, eval_steps) for p in paths]
     results = [

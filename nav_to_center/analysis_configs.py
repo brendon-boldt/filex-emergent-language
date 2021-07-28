@@ -2,6 +2,12 @@ from pathlib import Path
 from typing import Dict, Any
 
 configs: Dict[str, Dict[str, Any]] = {
+    "quick_test": {
+        "path": "results/quick_test",
+        "type": "correlation",
+        "ind_var": "rs_multiplier_log",
+        "dep_var": "entropy",
+    },
     "corr_temp": {
         "path": "results/temperature",
         "type": "correlation",

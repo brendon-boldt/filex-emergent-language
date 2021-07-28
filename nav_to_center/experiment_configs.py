@@ -1,5 +1,19 @@
 from typing import Dict, Iterator
-import env  # type: ignore
+
+
+def quick_test() -> Iterator[Dict]:
+    base = {
+        "total_timesteps": 40_000,
+    }
+    n = 4
+    hi = 0
+    lo = -4
+    for i in range(n):
+        x = 10 ** (lo + (hi - lo) * i / (n - 1))
+        yield {
+            "rs_multiplier": x,
+            **base,
+        }
 
 
 def learning_rate() -> Iterator[Dict]:
