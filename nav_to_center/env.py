@@ -97,7 +97,6 @@ class NavToCenter(gym.Env):
             raise Exception("Cannot take action after the agent has stopped")
         self.num_steps += 1
         # If the max has been reached, force the agent to stop
-        prev_location = self.location.copy()
         self._take_action(action)
         obs, reward, done, info = self._get_step_result(action)
         obs = self.get_observation()

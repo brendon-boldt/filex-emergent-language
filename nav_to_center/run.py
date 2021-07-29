@@ -3,15 +3,14 @@ import argparse
 from argparse import Namespace
 from pathlib import Path
 import pickle as pkl
-import importlib
 import shutil
 import uuid
 import re
 
 from stable_baselines3.common.vec_env import DummyVecEnv  # type: ignore
-import torch
+import torch  # type: ignore
 import numpy as np  # type: ignore
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from joblib import Parallel, delayed  # type: ignore
 from tqdm import tqdm  # type: ignore
 import pandas as pd  # type: ignore
@@ -137,7 +136,6 @@ def collect_metrics(
     bottleneck_values = []
     steps_values = []
     successes = 0.0
-    trajs: List[List] = []
     n_episodes = 0
     n_steps = 0
     discretize = True

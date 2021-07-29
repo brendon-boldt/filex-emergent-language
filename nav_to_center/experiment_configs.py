@@ -47,7 +47,7 @@ def low_learning_rate() -> Iterator[Dict]:
             }
 
 
-def lexicon_size() -> Iterator[Dict]:
+def bottleneck_size() -> Iterator[Dict]:
     n = 400
     hi = 3
     lo = 10

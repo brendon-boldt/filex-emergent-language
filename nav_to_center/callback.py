@@ -1,18 +1,17 @@
-import os
 import warnings
 import argparse
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Union
 
-import torch
+import torch  # type: ignore
 import gym  # type: ignore
 import numpy as np  # type: ignore
-from stable_baselines3.common.callbacks import EventCallback, BaseCallback
-from stable_baselines3.common.vec_env import (
+from stable_baselines3.common.callbacks import EventCallback  # type: ignore
+from stable_baselines3.common.vec_env import (  # type: ignore
     DummyVecEnv,
     VecEnv,
     sync_envs_normalization,
 )
-from torch.utils.tensorboard import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter  # type: ignore
 
 from . import util
 
@@ -44,7 +43,7 @@ class LoggingCallback(EventCallback):
 
         self.eval_env = eval_env
         self.log_path = self.writer.log_dir
-        self.evaluations_results: List[List[np.ndarray]] = []
+        self.evaluations_results: List[float] = []
         self.evaluations_timesteps: List[int] = []
         self.evaluations_length: List[List[int]] = []
 
@@ -65,7 +64,7 @@ class LoggingCallback(EventCallback):
         if self.model is None or self.model.policy is None:
             raise ValueError("Model/policy is None.")
         episode_rewards = []
-        episode_lengths = []
+        episode_lengths: List[int] = []
         bn_activations = []
         env = self.eval_env.envs[0]
         while sum(episode_lengths) < self.n_eval_steps:
@@ -94,10 +93,8 @@ class LoggingCallback(EventCallback):
                 ep_lengths=self.evaluations_length,
             )
 
-        mean_reward, std_reward = np.mean(episode_rewards), np.std(episode_rewards)
-        mean_ep_length, std_ep_length = np.mean(episode_lengths), np.std(
-            episode_lengths
-        )
+        mean_reward, _ = np.mean(episode_rewards), np.std(episode_rewards)
+        mean_ep_length, _ = np.mean(episode_lengths), np.std(episode_lengths)
         self.writer.add_scalar("mean_reward", float(mean_reward), self.num_timesteps)
         self.writer.add_scalar("mean_ep_length", mean_ep_length, self.num_timesteps)
         self.writer.add_scalar("rate", self.num_timesteps, self.num_timesteps)

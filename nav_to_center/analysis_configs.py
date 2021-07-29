@@ -8,34 +8,34 @@ configs: Dict[str, Dict[str, Any]] = {
         "ind_var": "rs_multiplier_log",
         "dep_var": "entropy",
     },
-    "corr_temp": {
+    "temperature": {
         "path": "results/temperature",
         "type": "correlation",
         "ind_var": "bottleneck_temperature_log",
         "dep_var": "entropy",
         "groups": ["rs_multiplier"],
     },
-    "corr_lr": {
+    "learning_rate": {
         "path": "results/learning_rate",
         "type": "correlation",
         "ind_var": "learning_rate_log",
         "dep_var": "entropy",
         "groups": ["rs_multiplier"],
     },
-    "low_lr": {
+    "low_learning_rate": {
         "path": "results/low_learning_rate",
         "type": "correlation",
         "ind_var": "learning_rate_log",
         "dep_var": "entropy",
     },
-    "corr_lexicon_size": {
-        "path": "results/lexicon_size",
+    "bottleneck_size": {
+        "path": "results/bottleneck_size",
         "type": "correlation",
-        "ind_var": "lexicon_size_log",
+        "ind_var": "bottleneck_size_log",
         "dep_var": "entropy",
         "groups": ["rs_multiplier"],
     },
-    "corr_sparsity": {
+    "sparsity": {
         "path": "results/sparsity",
         "type": "correlation",
         "ind_var": "rs_multiplier_log",

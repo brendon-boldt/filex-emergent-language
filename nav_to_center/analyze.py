@@ -1,5 +1,4 @@
 import argparse
-import importlib
 from pathlib import Path
 from typing import Any, List, Optional, Tuple, Iterator, Dict, Union
 from itertools import product
@@ -69,7 +68,7 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
             # ax.set_ylabel("Entropy (bits)")
             ax.set_ylim(1.5, 5.1)
             ax.set_yticks([2, 3, 4, 5])
-        if ind_var == "lexicon_size_log":
+        if ind_var == "bottleneck_size_log":
             ax.set_ylim(2.9, 8.1)
             ax.plot([3, 8], [3, 8], color="gray", linewidth=1.0)
             ax.set_yticks([3, 4, 5, 6, 7, 8])
@@ -117,8 +116,8 @@ def preprocess_data(df: pd.DataFrame) -> None:
     df["bottleneck_temperature_log"] = np.log2(df["bottleneck_temperature"])
     df["rs_multiplier_log"] = np.log10(df["rs_multiplier"])
     df["learning_rate_log"] = np.log10(df["learning_rate"])
-    df["lexicon_size"] = df["pre_arch"].apply(lambda x: eval(x)[-1])
-    df["lexicon_size_log"] = np.log2(df["lexicon_size"])
+    df["bottleneck_size"] = df["pre_arch"].apply(lambda x: eval(x)[-1])
+    df["bottleneck_size_log"] = np.log2(df["bottleneck_size"])
 
 
 def get_args() -> argparse.Namespace:

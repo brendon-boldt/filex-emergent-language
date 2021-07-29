@@ -1,6 +1,6 @@
 import argparse
 
-from stable_baselines3 import DQN, PPO, A2C, SAC, TD3  # type: ignore
+from stable_baselines3 import PPO  # type: ignore
 
 cfg = argparse.Namespace(
     bottleneck_temperature=1.5,

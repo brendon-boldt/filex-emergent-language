@@ -4,6 +4,7 @@
 ## Running the code
 
 Create an environment (e.g., using `pip` or `conda`) and install the packages specified in `requirements.txt`.
+This code has been tested with Python 3.8 and 3.9 on GNU/Linux.
 
 To train the models run,
 ```

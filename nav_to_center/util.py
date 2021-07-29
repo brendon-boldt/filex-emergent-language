@@ -1,9 +1,9 @@
-from typing import Tuple, List, Dict, Any, Callable
+from typing import Tuple, List, Dict, Any
 from functools import partial
 from argparse import Namespace
 
 import numpy as np  # type: ignore
-import torch
+import torch  # type: ignore
 import gym  # type: ignore
 from stable_baselines3 import PPO  # type: ignore
 
@@ -46,7 +46,6 @@ def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float]:
             act = policy_out[0][0].numpy()
             bn = fe.forward_bottleneck(obs_tensor).numpy()
         bns.append(bn)
-        prev_loc = env.location.copy()
         obs, reward, done, info = env.step(act)
         total_reward += reward
         steps += 1
@@ -100,6 +99,6 @@ def make_model(cfg: Namespace) -> Any:
     if cfg.init_model_path is not None:
         try:
             model.policy.load_state_dict(torch.load(cfg.init_model_path))
-        except:
+        except Exception:
             return None
     return model
