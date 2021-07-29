@@ -20,8 +20,11 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         result = linregress(df[ind_var], df[dep_var])
         print(f"Group: {name}")
         # TODO Make a LaTeX and normal version
-        for x in ["slope", "intercept", "rvalue"]:
-            print(f"{getattr(result, x):.2f}", end="\t")
+        print(
+            f"slope: {result.slope:.2f}\t"
+            f"intercept: {result.intercept:.2f}\t"
+            f"rvalue: {result.rvalue:.2f}"
+        )
         print()
 
         fig = plt.figure(figsize=(2, 2))

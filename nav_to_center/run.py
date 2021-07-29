@@ -18,8 +18,9 @@ import pandas as pd  # type: ignore
 from . import env
 from .callback import LoggingCallback
 from . import util
-from .default_config import cfg as _cfg
 from . import experiment_configs
+
+_cfg = experiment_configs.default_config
 
 
 def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
