@@ -62,7 +62,7 @@ def low_learning_rate() -> Iterator[Dict]:
     n = 100
     hi = -3
     lo = -7
-    # for sparsity in [1e-4, 1]:
+    # for sparsity in [1e4, 1]:
     for sparsity in [1]:
         for i in range(n):
             x = 10 ** (lo + (hi - lo) * i / (n - 1))
@@ -77,7 +77,7 @@ def bottleneck_size() -> Iterator[Dict]:
     n = 400
     hi = 3
     lo = 10
-    for sparsity in [1e-4, 1]:
+    for sparsity in [1, 1e4]:
         prev_x = None
         for i in range(n):
             x = int(2 ** (lo + (hi - lo) * i / (n - 1)))
@@ -96,8 +96,8 @@ def sparsity() -> Iterator[Dict]:
         "total_timesteps": 40_000,
     }
     n = 1000
-    hi = 0
-    lo = -4
+    hi = 4
+    lo = 0
     for i in range(n):
         x = 10 ** (lo + (hi - lo) * i / (n - 1))
         yield {
@@ -110,7 +110,7 @@ def temperature() -> Iterator[Dict]:
     n = 400
     hi = 1
     lo = -1
-    for sparsity in [1e-4, 1]:
+    for sparsity in [1, 1e4]:
         for i in range(n):
             x = 2 ** (lo + (hi - lo) * i / (n - 1))
             yield {
