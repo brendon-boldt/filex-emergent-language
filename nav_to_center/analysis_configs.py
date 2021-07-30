@@ -5,7 +5,7 @@ configs: Dict[str, Dict[str, Any]] = {
     "quick_test": {
         "path": "results/quick_test",
         "type": "correlation",
-        "ind_var": "rs_multiplier_log",
+        "ind_var": "sparsity_log",
         "dep_var": "entropy",
     },
     "temperature": {
@@ -13,14 +13,14 @@ configs: Dict[str, Dict[str, Any]] = {
         "type": "correlation",
         "ind_var": "bottleneck_temperature_log",
         "dep_var": "entropy",
-        "groups": ["rs_multiplier"],
+        "groups": ["sparsity"],
     },
     "learning_rate": {
         "path": "results/learning_rate",
         "type": "correlation",
         "ind_var": "learning_rate_log",
         "dep_var": "entropy",
-        "groups": ["rs_multiplier"],
+        "groups": ["sparsity"],
     },
     "low_learning_rate": {
         "path": "results/low_learning_rate",
@@ -33,12 +33,12 @@ configs: Dict[str, Dict[str, Any]] = {
         "type": "correlation",
         "ind_var": "bottleneck_size_log",
         "dep_var": "entropy",
-        "groups": ["rs_multiplier"],
+        "groups": ["sparsity"],
     },
     "sparsity": {
         "path": "results/sparsity",
         "type": "correlation",
-        "ind_var": "rs_multiplier_log",
+        "ind_var": "sparsity_log",
         "dep_var": "entropy",
     },
 }

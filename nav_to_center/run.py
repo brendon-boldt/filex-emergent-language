@@ -38,7 +38,7 @@ def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     env_eval = DummyVecEnv([lambda: env.NavToCenter(is_eval=True, **env_kwargs)])
     logging_callback = LoggingCallback(
         eval_env=env_eval,
-        n_eval_steps=cfg.eval_steps,
+        n_eval_episodes=cfg.eval_episodes_logging,
         eval_freq=cfg.eval_freq,
         writer=writer,
         cfg=cfg,
@@ -111,7 +111,7 @@ def get_one_hot_vectors(policy: Any) -> np.ndarray:
 def collect_metrics(
     model_path: Path,
     out_path: Path,
-    eval_steps: int,
+    eval_episodes: int,
 ) -> Optional[pd.DataFrame]:
     with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
@@ -142,8 +142,8 @@ def collect_metrics(
     discretize = True
 
     g_rad = environment.goal_radius / environment.world_radius
-    lo = int(np.ceil(eval_steps * g_rad ** 2))
-    hi = int(np.ceil(eval_steps / (1 - g_rad ** 2)))
+    lo = int(np.ceil(eval_episodes * g_rad ** 2))
+    hi = int(np.ceil(eval_episodes / (1 - g_rad ** 2)))
 
     # The index is passed to the initialization. We start with lo so that that
     # the agent is not intialized in the center.
@@ -213,7 +213,6 @@ def aggregate_results(
     n_jobs: int,
     progression: bool,
     target_ts: Optional[int],
-    eval_steps: int,
     df_concat_paths: List[Path],
 ) -> None:
     dfs_to_concat = [pd.read_csv(p) for p in df_concat_paths]
@@ -221,7 +220,7 @@ def aggregate_results(
     if not out_dir.exists():
         out_dir.mkdir(parents=True)
     paths = [x for p in path_strs for x in expand_paths(p, progression, target_ts)]
-    jobs = [delayed(collect_metrics)(p, out_dir, eval_steps) for p in paths]
+    jobs = [delayed(collect_metrics)(p, out_dir, _cfg.eval_episodes) for p in paths]
     results = [
         r for r in Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs)) if r is not None
     ]
@@ -237,7 +236,6 @@ def get_args() -> argparse.Namespace:
     parser.add_argument("--num_trials", type=int, default=1)
     parser.add_argument("--progression", action="store_true")
     parser.add_argument("--target_timestep", type=int, default=None)
-    parser.add_argument("--eval_steps", type=int, default=10_000)
     parser.add_argument("--include_csv", type=str, action="append")
     parser.add_argument("-j", type=int, default=1)
     return parser.parse_args()
@@ -254,7 +252,6 @@ def main() -> None:
             args.j,
             args.progression,
             args.target_timestep,
-            args.eval_steps,
             args.include_csv,
         )
     elif args.command == "run":

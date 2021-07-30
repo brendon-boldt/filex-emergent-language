@@ -27,7 +27,7 @@ class NavToCenter(gym.Env):
         goal_radius: float,
         world_radius: float,
         max_step_scale: float,
-        rs_multiplier: float,
+        sparsity: float,
         **kwargs,
     ) -> None:
         super(self.__class__, self).__init__()
@@ -35,7 +35,7 @@ class NavToCenter(gym.Env):
         self.world_radius = world_radius
         self.is_eval = is_eval
         self.max_step_scale = max_step_scale
-        self.rs_multiplier = rs_multiplier
+        self.sparsity = sparsity
 
         self.max_steps = int(self.world_radius * self.max_step_scale)
 
@@ -87,7 +87,7 @@ class NavToCenter(gym.Env):
         else:
             info["at_goal"] = at_goal
             reward = 0.0
-            reward += self.rs_multiplier * (cosine_sim - 1)
+            reward += (cosine_sim - 1) / self.sparsity
             if self.stop and at_goal:
                 reward += 1.0
         return observation, reward, self.stop, info

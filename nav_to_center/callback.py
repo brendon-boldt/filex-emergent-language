@@ -22,11 +22,11 @@ class LoggingCallback(EventCallback):
         eval_env: Union[gym.Env, VecEnv],
         writer: SummaryWriter,
         cfg: argparse.Namespace,
-        n_eval_steps: int = 1000,
+        n_eval_episodes: int = 200,
         eval_freq: int = 5000,
     ) -> None:
         super(self.__class__, self).__init__(None, verbose=0)
-        self.n_eval_steps = n_eval_steps
+        self.n_eval_episodes = n_eval_episodes
         self.eval_freq = eval_freq
         self.best_mean_reward = -np.inf
         self.writer = writer
@@ -67,7 +67,7 @@ class LoggingCallback(EventCallback):
         episode_lengths: List[int] = []
         bn_activations = []
         env = self.eval_env.envs[0]
-        while sum(episode_lengths) < self.n_eval_steps:
+        for _ in range(self.n_eval_episodes):
             env.reset()
             ep_len, bns, success = util.eval_episode(
                 self.model.policy,

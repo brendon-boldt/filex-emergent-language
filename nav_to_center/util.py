@@ -56,7 +56,7 @@ def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float]:
 
 def make_env_kwargs(cfg: Namespace) -> Dict:
     return {
-        "rs_multiplier": cfg.rs_multiplier,
+        "sparsity": cfg.sparsity,
         "goal_radius": cfg.goal_radius,
         "world_radius": cfg.world_radius,
         "max_step_scale": cfg.max_step_scale,
@@ -67,8 +67,8 @@ def _make_policy_kwargs(cfg: Namespace) -> gym.Env:
     return {
         "net_arch": {
             "bottleneck_hard": cfg.bottleneck_hard,
-            "pre_arch": cfg.pre_arch,
-            "post_arch": cfg.post_arch,
+            "pre_bottleneck_arch": cfg.pre_bottleneck_arch,
+            "post_bottleneck_arch": cfg.post_bottleneck_arch,
             "temp": cfg.bottleneck_temperature,
             "act": cfg.policy_activation,
         },
@@ -85,13 +85,12 @@ def make_model(cfg: Namespace) -> Any:
         "policy_kwargs": policy_kwargs,
         "verbose": 0,
         "learning_rate": cfg.learning_rate,
-        "device": cfg.device,
-        "ent_coef": cfg.entropy_coef,
+        "device": "cpu",
         "gamma": cfg.gamma,
     }
-    if cfg.alg != PPO:
+    if cfg.rl_algorithm != PPO:
         del alg_kwargs["n_steps"]
-    model = cfg.alg(
+    model = cfg.rl_algorithm(
         nn.BottleneckPolicy,
         env,
         **alg_kwargs,

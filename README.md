@@ -5,6 +5,7 @@
 
 Create an environment (e.g., using `pip` or `conda`) and install the packages specified in `requirements.txt`.
 This code has been tested with Python 3.8 and 3.9 on GNU/Linux.
+Since the models used in this project are small, we recommend using a CPU and parallelization rather than a GPU.
 
 To train the models run,
 ```

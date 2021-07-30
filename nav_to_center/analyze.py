@@ -53,7 +53,7 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
             ticks = [0.5, 0.75, 1, 1.5, 2]
             ax.set_xticks([np.log2(x) for x in ticks])
             ax.set_xticklabels(ticks)
-        if ind_var == "rs_multiplier_log":
+        if ind_var == "sparsity_log":
             # ax.set_xlabel("Reward Shaping Multiplier")
             # ticks = [1e-4, 1e-3, 1e-2, 1e-1, 1e0]
             ticks = [1e-4, 1e-2, 1e0]
@@ -81,9 +81,9 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
 def preprocess_data(df: pd.DataFrame) -> None:
     df.drop(np.flatnonzero(df["success_rate"] < 1.0), inplace=True)
     df["bottleneck_temperature_log"] = np.log2(df["bottleneck_temperature"])
-    df["rs_multiplier_log"] = np.log10(df["rs_multiplier"])
+    df["sparsity_log"] = np.log10(df["sparsity"])
     df["learning_rate_log"] = np.log10(df["learning_rate"])
-    df["bottleneck_size"] = df["pre_arch"].apply(lambda x: eval(x)[-1])
+    df["bottleneck_size"] = df["pre_bottleneck_arch"].apply(lambda x: eval(x)[-1])
     df["bottleneck_size_log"] = np.log2(df["bottleneck_size"])
 
 

@@ -17,7 +17,7 @@ class BottleneckExtractor(nn.Module):
         super(self.__class__, self).__init__()
 
         # We need to make a copy of this bebcause stable baselines reuses references
-        pre_arch = [x for x in net_arch["pre_arch"]]
+        pre_arch = [x for x in net_arch["pre_bottleneck_arch"]]
         pre_arch.insert(0, feature_dim)
         pre_layers: List[nn.Module] = []
         for i in range(len(pre_arch) - 1):
@@ -42,7 +42,7 @@ class BottleneckExtractor(nn.Module):
             dim=-1,
         )
 
-        post_arch = [x for x in net_arch["post_arch"]]
+        post_arch = [x for x in net_arch["post_bottleneck_arch"]]
         post_arch.insert(0, pre_arch[-1])
         post_layers: List[nn.Module] = []
         for i in range(len(post_arch) - 1):
@@ -72,9 +72,9 @@ class BottleneckPolicy(ActorCriticPolicy):
     # This class may need to be modified if Stable Baselines is updated
     def _build_mlp_extractor(self) -> None:
         # This overrides the default MLP extractor.
-        self.mlp_extractor = BottleneckExtractor(
+        self.mlp_extractor = BottleneckExtractor(  # type: ignore
             self.features_dim,
-            net_arch=self.net_arch,
+            net_arch=self.net_arch,  # type: ignore
             activation_fn=self.activation_fn,
             device=self.device,
         )
