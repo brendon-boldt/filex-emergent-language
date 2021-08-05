@@ -35,11 +35,19 @@ configs: Dict[str, Dict[str, Any]] = {
         "dep_var": "entropy",
         "groups": ["sparsity"],
     },
+    "world_radius": {
+        "path": "results/world_radius",
+        "type": "correlation",
+        "ind_var": "world_radius_log",
+        "dep_var": "entropy",
+        "groups": ["sparsity"],
+    },
     "sparsity": {
         "path": "results/sparsity",
         "type": "correlation",
         "ind_var": "sparsity_log",
         "dep_var": "entropy",
+        "groups": ["bottleneck_size"],
     },
 }
 

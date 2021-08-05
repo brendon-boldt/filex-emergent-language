@@ -32,7 +32,6 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         ax.scatter(df[ind_var], df[dep_var], s=0.5)
         ticks: List[Union[int, float]]
         if dep_var == "entropy":
-            # ax.set_ylabel("Entropy (bits)")
             ax.set_ylim(1.5, 5.1)
             ax.set_yticks([2, 3, 4, 5])
         if ind_var == "bottleneck_size_log":
@@ -42,28 +41,33 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
             ticks = [8, 32, 128, 512]
             ax.set_xticks([np.log2(x) for x in ticks])
             ax.set_xticklabels(ticks)
+        if ind_var == "world_radius_log":
+            ticks = [2, 4, 8, 16]
+            ax.set_xticks([np.log2(x) for x in ticks])
+            ax.set_xticklabels(ticks)
+            ax.set_xlim(0.8, np.log2(22))
+            ax.set_yticks([3, 3.5, 4, 4.5])
+            ax.set_ylim(2.8, 4.9)
+            # ax.set_ylabel("Entropy (bits)")
+            # ax.set_xlabel("World Radius")
         if ind_var == "learning_rate_log":
-            ax.set_xlabel("Bottleneck Temperature")
             ticks = [1e-4, 1e-3, 1e-2, 1e-1]
             ax.set_xticks([np.log10(x) for x in ticks])
             ax.set_xticklabels(ticks)
             ax.set_xlim(-4.2, -0.8)
         if ind_var == "bottleneck_temperature_log":
-            # ax.set_xlabel("Bottleneck Temperature")
             ticks = [0.5, 0.75, 1, 1.5, 2]
             ax.set_xticks([np.log2(x) for x in ticks])
             ax.set_xticklabels(ticks)
         if ind_var == "sparsity_log":
-            # ax.set_xlabel("Reward Shaping Multiplier")
             # ticks = [1e-4, 1e-3, 1e-2, 1e-1, 1e0]
-            ticks = [1e-4, 1e-2, 1e0]
+            ax.set_yticks([3, 4, 5, 6, 7, 8])
+            ax.set_ylim(2.9, 8.1)
+            ticks = [1, 100, 10_000]
             ax.set_xticks([np.log10(x) for x in ticks])
             ax.set_xticklabels(ticks)
-        raw_fn = f"{ind_var}-{dep_var}-{name}"
-        plt.savefig(
-            cfg["path"] / raw_fn.replace(".", ","),
-            bbox_inches="tight",
-        )
+        fn = f"{ind_var}-{dep_var}-{name}".replace(".", ",")
+        plt.savefig(cfg["path"] / f"{fn}.pdf", bbox_inches="tight", format="pdf")
         plt.close()
 
     if "groups" in cfg:
@@ -83,6 +87,7 @@ def preprocess_data(df: pd.DataFrame) -> None:
     df["bottleneck_temperature_log"] = np.log2(df["bottleneck_temperature"])
     df["sparsity_log"] = np.log10(df["sparsity"])
     df["learning_rate_log"] = np.log10(df["learning_rate"])
+    df["world_radius_log"] = np.log2(df["world_radius"])
     df["bottleneck_size"] = df["pre_bottleneck_arch"].apply(lambda x: eval(x)[-1])
     df["bottleneck_size_log"] = np.log2(df["bottleneck_size"])
 

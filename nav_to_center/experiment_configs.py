@@ -26,16 +26,19 @@ default_config = argparse.Namespace(
     sparsity=float("inf"),
 )
 
+sparsities = [1, 10_000]
+
+
+def log_range(low: float, high: float, steps: int) -> Iterator[float]:
+    for i in range(steps):
+        yield low * (high / low) ** ((i - 1) / steps)
+
 
 def quick_test() -> Iterator[Dict]:
     base = {
         "total_timesteps": 40_000,
     }
-    n = 4
-    hi = 0
-    lo = -4
-    for i in range(n):
-        x = 10 ** (lo + (hi - lo) * i / (n - 1))
+    for x in log_range(1e-4, 0.1, 4):
         yield {
             "sparsity": x,
             **base,
@@ -43,44 +46,18 @@ def quick_test() -> Iterator[Dict]:
 
 
 def learning_rate() -> Iterator[Dict]:
-    n = 400
-    hi = -1
-    lo = -4
-    for sparsity in [1e-4, 1]:
-        for i in range(n):
-            x = 10 ** (lo + (hi - lo) * i / (n - 1))
+    for sparsity in sparsities:
+        for x in log_range(1e-4, 0.1, 400):
             yield {
                 "sparsity": sparsity,
                 "learning_rate": x,
-            }
-
-
-def low_learning_rate() -> Iterator[Dict]:
-    base = {
-        "total_timesteps": 500_000,
-    }
-    n = 100
-    hi = -3
-    lo = -7
-    # for sparsity in [1e4, 1]:
-    for sparsity in [1]:
-        for i in range(n):
-            x = 10 ** (lo + (hi - lo) * i / (n - 1))
-            yield {
-                "sparsity": sparsity,
-                "learning_rate": x,
-                **base,
             }
 
 
 def bottleneck_size() -> Iterator[Dict]:
-    n = 400
-    hi = 3
-    lo = 10
-    for sparsity in [1, 1e4]:
+    for sparsity in sparsities:
         prev_x = None
-        for i in range(n):
-            x = int(2 ** (lo + (hi - lo) * i / (n - 1)))
+        for x in log_range(2 ** 3, 2 ** 8, 400):
             # Because of squashing with int, skip over duplicates
             if x == prev_x:
                 continue
@@ -93,27 +70,30 @@ def bottleneck_size() -> Iterator[Dict]:
 
 def sparsity() -> Iterator[Dict]:
     base = {
-        "total_timesteps": 40_000,
+        "total_timesteps": 100_000,
     }
-    n = 1000
-    hi = 4
-    lo = 0
-    for i in range(n):
-        x = 10 ** (lo + (hi - lo) * i / (n - 1))
-        yield {
-            "sparsity": x,
-            **base,
-        }
+    for bottleneck_size in [32, 256]:
+        for x in log_range(1, 10_000, 400):
+            yield {
+                "pre_bottleneck_arch": [0x20, bottleneck_size],
+                "sparsity": x,
+                **base,
+            }
 
 
 def temperature() -> Iterator[Dict]:
-    n = 400
-    hi = 1
-    lo = -1
-    for sparsity in [1, 1e4]:
-        for i in range(n):
-            x = 2 ** (lo + (hi - lo) * i / (n - 1))
+    for sparsity in sparsities:
+        for x in log_range(0.5, 2, 400):
             yield {
                 "sparsity": sparsity,
                 "bottleneck_temperature": x,
+            }
+
+
+def world_radius() -> Iterator[Dict]:
+    for sparsity in sparsities:
+        for x in log_range(2, 20, 400):
+            yield {
+                "world_radius": x,
+                "sparsity": sparsity,
             }
