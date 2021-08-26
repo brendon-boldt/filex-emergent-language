@@ -63,24 +63,26 @@ class LoggingCallback(EventCallback):
 
         if self.model is None or self.model.policy is None:
             raise ValueError("Model/policy is None.")
-        episode_rewards = []
-        episode_lengths: List[int] = []
-        bn_activations = []
         env = self.eval_env.envs[0]
+        results = []
         for _ in range(self.n_eval_episodes):
             env.reset()
-            ep_len, bns, success = util.eval_episode(
+            ep_results = util.eval_episode(
                 self.model.policy,
                 self.model.policy.mlp_extractor,
                 env,
                 self.cfg != "none",
             )
-            episode_rewards.append(success)
-            episode_lengths.append(ep_len)
-            bn_activations.extend(bns)
-        bn_activations = np.array(bn_activations)
+            results.append(ep_results)
+
+        episode_rewards = [r['total_reward'] for r in results]
+        episode_lengths = [r['steps'] for r in results]
+        bn_activations = np.concatenate([r['bn_activations'] for r in results])
+
         entropy = util.get_entropy(bn_activations)
         self.writer.add_scalar("entropy", entropy, self.num_timesteps)
+        self.writer.add_histogram("bns", np.log10(bn_activations.mean(0).clip(1e-6)), self.num_timesteps)
+        # self.writer.add_scalar("bn_sp", (bn_activations.mean(0) < 1e-5).sum(), self.num_timesteps)
 
         if self.log_path is not None:
             self.evaluations_timesteps.append(self.num_timesteps)

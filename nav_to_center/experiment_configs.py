@@ -1,6 +1,8 @@
 from typing import Dict, Iterator
 import argparse
 
+from math import pi
+
 from stable_baselines3 import PPO  # type: ignore
 
 default_config = argparse.Namespace(
@@ -14,16 +16,18 @@ default_config = argparse.Namespace(
     eval_episodes_logging=200,
     eval_episodes=3_000,
     rl_algorithm=PPO,
-    n_steps=0x400,  # Was 0x80
+    n_steps=0x400,
     batch_size=0x100,
     learning_rate=3e-3,
     init_model_path=None,
     goal_radius=1.0,
     world_radius=9.0,
+    eval_world_radius=9.0,
     # Maximum step count as a multiplier of world_radius
     max_step_scale=3.0,
     gamma=0.9,
     sparsity=float("inf"),
+    spiral_angle=0.0,
 )
 
 sparsities = [1, 10_000]
@@ -92,8 +96,23 @@ def temperature() -> Iterator[Dict]:
 
 def world_radius() -> Iterator[Dict]:
     for sparsity in sparsities:
-        for x in log_range(2, 20, 400):
+        for x in log_range(2, 40, 400):
             yield {
                 "world_radius": x,
                 "sparsity": sparsity,
+            }
+
+
+def debug() -> Iterator[Dict]:
+    base = {
+        "total_timesteps": 100_000,
+        "n_steps": 0x80,
+        "batch_size": 0x80,
+    }
+    for bottleneck_size in [32, 256]:
+        for x in log_range(1, 10_000, 18 * 5):
+            yield {
+                "pre_bottleneck_arch": [0x20, bottleneck_size],
+                "sparsity": x,
+                **base,
             }

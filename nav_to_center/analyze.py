@@ -1,13 +1,91 @@
 import argparse
 from pathlib import Path
-from typing import Any, List, Tuple, Dict, Union
+from typing import Any, List, Tuple, Dict, Union, Iterator, Optional
+from itertools import product
+import math
 
 from scipy.stats import linregress  # type: ignore
 from matplotlib import pyplot as plt  # type: ignore
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
+import matplotlib
 
 from . import analysis_configs
+
+
+def iter_groups(
+    df: pd.DataFrame, groups: List[str], plot_shape: Optional[Tuple[int, int]]
+) -> Iterator[Tuple[List, pd.DataFrame, matplotlib.axes.Axes]]:
+    valss = product(*(df[groups[i]].unique() for i in range(len(groups))))
+    for vals in valss:
+        filtered = df.loc[(df[groups] == vals).all(1)]
+        if not len(filtered):
+            continue
+        if plot_shape is not None:
+            filtered = filtered[: plot_shape[0] * plot_shape[1]]
+            # random_idxs = np.random.default_rng().choice(
+            #     len(filtered),
+            #     min(len(filtered), np.prod(plot_shape)),
+            #     replace=False,
+            # )
+            # filtered = filtered.iloc[random_idxs]
+        else:
+            row_len = math.ceil(math.sqrt(len(filtered)))
+            plot_shape = row_len, row_len
+            # figsize = (8, 8)
+        figsize = 4 * plot_shape[1], 4 * plot_shape[0]
+        fig, axes = plt.subplots(*plot_shape, figsize=figsize)
+        plt.subplots_adjust(
+            left=0,
+            right=1.0,
+            top=1,
+            bottom=0,
+            wspace=0,
+            hspace=0,
+        )
+        yield vals, filtered, axes
+
+
+def make_snowflake_plot(
+    df: pd.DataFrame,
+    groups: List[str],
+    path: Path,
+    plot_shape: Optional[Tuple[int, int]] = None,
+) -> None:
+    if not path.exists():
+        path.mkdir()
+    path = path / "starfish"
+    if not path.exists():
+        path.mkdir()
+    for vals, filtered, axes in iter_groups(df, groups, plot_shape):
+        # sorted_rows = filtered.sort_values("uuid").itertuples()
+        sorted_rows = filtered.itertuples()
+        for axis, row in zip(axes.reshape(-1), sorted_rows):
+            axis.axis("off")
+            axis.set_xlim(-1.1, 1.1)
+            axis.set_ylim(-1.1, 1.1)
+            try:
+                vectors = np.array(eval(row.vectors))
+            except Exception:
+                continue
+            uses = np.array(eval(row.usages))
+            axis.set_title(f"{row.pe:.3f}", loc="left", y=0.9)
+            # axis.set_title(f"{clusters:.2f}")
+            # axis.set_title(f"{row.fractional:.2f} - {clusters} - {row.steps:.1f}")
+            for vector, use in zip(vectors, uses):
+                norm = (vector ** 2).sum() ** 0.5
+                vector /= max(norm, 1.0)
+                axis.plot(
+                    [0, vector[0]],
+                    [0, vector[1]],
+                    color="blue",
+                    alpha=use / max(uses),
+                    linewidth=8,
+                    solid_capstyle="round",
+                )
+        name = "lexmap_" + "_".join(str(v).replace(".", ",") for v in vals)
+        plt.savefig(path / name)
+        plt.close()
 
 
 def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
@@ -34,6 +112,7 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         if dep_var == "entropy":
             ax.set_ylim(1.5, 5.1)
             ax.set_yticks([2, 3, 4, 5])
+            pass
         if ind_var == "bottleneck_size_log":
             ax.set_ylim(2.9, 8.1)
             ax.plot([3, 8], [3, 8], color="gray", linewidth=1.0)
@@ -42,12 +121,13 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
             ax.set_xticks([np.log2(x) for x in ticks])
             ax.set_xticklabels(ticks)
         if ind_var == "world_radius_log":
-            ticks = [2, 4, 8, 16]
-            ax.set_xticks([np.log2(x) for x in ticks])
-            ax.set_xticklabels(ticks)
-            ax.set_xlim(0.8, np.log2(22))
-            ax.set_yticks([3, 3.5, 4, 4.5])
-            ax.set_ylim(2.8, 4.9)
+            pass
+            # ticks = [2, 4, 8, 16]
+            # ax.set_xticks([np.log2(x) for x in ticks])
+            # ax.set_xticklabels(ticks)
+            # ax.set_xlim(0.8, np.log2(22))
+            # ax.set_yticks([3, 3.5, 4, 4.5])
+            # ax.set_ylim(2.8, 4.9)
             # ax.set_ylabel("Entropy (bits)")
             # ax.set_xlabel("World Radius")
         if ind_var == "learning_rate_log":
@@ -61,8 +141,8 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
             ax.set_xticklabels(ticks)
         if ind_var == "sparsity_log":
             # ticks = [1e-4, 1e-3, 1e-2, 1e-1, 1e0]
-            ax.set_yticks([3, 4, 5, 6, 7, 8])
-            ax.set_ylim(2.9, 8.1)
+            # ax.set_yticks([3, 4, 5, 6, 7, 8])
+            ax.set_ylim(1.9, 7.1)
             ticks = [1, 100, 10_000]
             ax.set_xticks([np.log10(x) for x in ticks])
             ax.set_xticklabels(ticks)
@@ -85,6 +165,8 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
 def preprocess_data(df: pd.DataFrame) -> None:
     df.drop(np.flatnonzero(df["success_rate"] < 1.0), inplace=True)
     df["bottleneck_temperature_log"] = np.log2(df["bottleneck_temperature"])
+    if "rs_multiplier" in df.columns:
+        df["sparsity"] = 1 / df["rs_multiplier"]
     df["sparsity_log"] = np.log10(df["sparsity"])
     df["learning_rate_log"] = np.log10(df["learning_rate"])
     df["world_radius_log"] = np.log2(df["world_radius"])

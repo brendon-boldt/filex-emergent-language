@@ -49,6 +49,13 @@ configs: Dict[str, Dict[str, Any]] = {
         "dep_var": "entropy",
         "groups": ["bottleneck_size"],
     },
+    "debug": {
+        "path": "results/debug",
+        "type": "correlation",
+        "ind_var": "sparsity_log",
+        "dep_var": "entropg",
+        "groups": ["bottleneck_size"],
+    },
 }
 
 for k in configs.keys():

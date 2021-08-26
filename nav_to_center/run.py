@@ -119,7 +119,7 @@ def collect_metrics(
     env_kwargs: Dict[str, Any] = {
         **util.make_env_kwargs(cfg),
         "is_eval": True,
-        "world_radius": 9.0,
+        "world_radius": _cfg.eval_world_radius,
     }
     environment = env.NavToCenter(**env_kwargs)
     model = util.make_model(cfg)
@@ -138,7 +138,6 @@ def collect_metrics(
     steps_values = []
     successes = 0.0
     n_episodes = 0
-    n_steps = 0
     discretize = True
 
     g_rad = environment.goal_radius / environment.world_radius
@@ -152,13 +151,12 @@ def collect_metrics(
         n_episodes += 1
         environment.reset()
         environment.fib_disc_init(i, hi)
-        ep_len, bns, success = util.eval_episode(
+        results = util.eval_episode(
             policy, mlp_extractor, environment, discretize
         )
-        n_steps += ep_len
-        successes += success
-        steps_values.append(ep_len)
-        bottleneck_values.extend(bns)
+        successes += results['total_reward']
+        steps_values.append(results['steps'])
+        bottleneck_values.extend(results['bn_activations'])
     np_bn_values = np.stack(bottleneck_values)
     entropy = util.get_entropy(np_bn_values)
     sample_id = str(uuid.uuid4())
@@ -219,7 +217,7 @@ def aggregate_results(
     out_dir = Path("results") / Path(path_strs[0]).name
     if not out_dir.exists():
         out_dir.mkdir(parents=True)
-    paths = [x for p in path_strs for x in expand_paths(p, progression, target_ts)]
+    paths = [x for p in path_strs for x in expand_paths(Path("log") / p, progression, target_ts)]
     jobs = [delayed(collect_metrics)(p, out_dir, _cfg.eval_episodes) for p in paths]
     results = [
         r for r in Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs)) if r is not None

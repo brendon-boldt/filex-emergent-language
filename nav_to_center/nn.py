@@ -55,6 +55,14 @@ class BottleneckExtractor(nn.Module):
         self.latent_dim_pi = post_arch[-1]
         self.latent_dim_vf = pre_arch[-1]
 
+        self.backward_log: List = []
+        def backward_hook(module, grad_input, grad_output) -> None:
+            pass
+            # self.backward_log.append(grad_output[0].detach().numpy())
+            # self.backward_log.append(grad_input[0].detach().numpy())
+        # self.pre_net.register_full_backward_hook(backward_hook)
+        # self.post_net.register_full_backward_hook(backward_hook)
+
     def forward(self, features: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         pi_x = self.pre_net(features)
         pi_x = self.bottleneck(pi_x)
@@ -62,10 +70,10 @@ class BottleneckExtractor(nn.Module):
         vf_x = self.vf_net(features)
         return pi_x, vf_x
 
-    def forward_bottleneck(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.pre_net(x)
-        x = self.bottleneck(x)
-        return x
+    def forward_bottleneck(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        logits = self.pre_net(x)
+        bn_activations = self.bottleneck(logits)
+        return logits, bn_activations
 
 
 class BottleneckPolicy(ActorCriticPolicy):

@@ -28,6 +28,7 @@ class NavToCenter(gym.Env):
         world_radius: float,
         max_step_scale: float,
         sparsity: float,
+        spiral_angle: float,
         **kwargs,
     ) -> None:
         super(self.__class__, self).__init__()
@@ -36,6 +37,7 @@ class NavToCenter(gym.Env):
         self.is_eval = is_eval
         self.max_step_scale = max_step_scale
         self.sparsity = sparsity
+        self.spiral_angle = spiral_angle
 
         self.max_steps = int(self.world_radius * self.max_step_scale)
 
@@ -66,6 +68,11 @@ class NavToCenter(gym.Env):
             action /= act_norm
         action /= self.world_radius
         self.location += action
+
+        # Apply spiral
+        r = np.sqrt((self.location ** 2).sum())
+        theta = np.arctan2(*self.location) + self.spiral_angle
+        self.location = r * np.array( [np.sin(theta), np.cos(theta)])
 
     def get_observation(self) -> np.ndarray:
         return -self.location
