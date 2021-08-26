@@ -26,11 +26,12 @@ def get_entropy(o: np.ndarray) -> np.ndarray:
     return xlx(np.eye(o.shape[-1])[o.argmax(-1)].mean(0)).sum(0)
 
 
-def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float]:
+def eval_episode(policy, fe, env, discretize) -> Dict[str, Any]:
     obs = env.get_observation()
     done = False
     steps = 0
     bns = []
+    logitss = []
     original_bottlenck = policy.mlp_extractor.bottleneck
     if discretize:
         policy.mlp_extractor.bottleneck = partial(
@@ -44,14 +45,20 @@ def eval_episode(policy, fe, env, discretize) -> Tuple[int, List, float]:
         with torch.no_grad():
             policy_out = policy(obs_tensor.unsqueeze(0), deterministic=True)
             act = policy_out[0][0].numpy()
-            bn = fe.forward_bottleneck(obs_tensor).numpy()
-        bns.append(bn)
+            bn_results = fe.forward_bottleneck(obs_tensor)
+        logitss.append(bn_results[0].numpy())
+        bns.append(bn_results[1].numpy())
         obs, reward, done, info = env.step(act)
         total_reward += reward
         steps += 1
     policy.mlp_extractor.bottleneck = original_bottlenck
     total_reward = float(info["at_goal"])
-    return steps, bns, total_reward
+    return {
+            'steps': steps,
+            'bn_activations': bns,
+            'bn_logits': logitss,
+            'total_reward': total_reward,
+    }
 
 
 def make_env_kwargs(cfg: Namespace) -> Dict:
@@ -60,6 +67,7 @@ def make_env_kwargs(cfg: Namespace) -> Dict:
         "goal_radius": cfg.goal_radius,
         "world_radius": cfg.world_radius,
         "max_step_scale": cfg.max_step_scale,
+        "biased_reward_shaping": cfg.biased_reward_shaping,
     }
 
 
@@ -77,7 +85,7 @@ def _make_policy_kwargs(cfg: Namespace) -> gym.Env:
 
 def make_model(cfg: Namespace) -> Any:
     env_kwargs = make_env_kwargs(cfg)
-    env = E.NavToCenter(is_eval=False, **env_kwargs)
+    env = cfg.environment(is_eval=False, **env_kwargs)
     policy_kwargs = _make_policy_kwargs(cfg)
     alg_kwargs = {
         "n_steps": cfg.n_steps,
