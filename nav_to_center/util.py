@@ -63,11 +63,11 @@ def eval_episode(policy, fe, env, discretize) -> Dict[str, Any]:
 
 def make_env_kwargs(cfg: Namespace) -> Dict:
     return {
-        "spiral_angle": cfg.spiral_angle,
         "sparsity": cfg.sparsity,
         "goal_radius": cfg.goal_radius,
         "world_radius": cfg.world_radius,
         "max_step_scale": cfg.max_step_scale,
+        "biased_reward_shaping": cfg.biased_reward_shaping,
     }
 
 
@@ -85,7 +85,7 @@ def _make_policy_kwargs(cfg: Namespace) -> gym.Env:
 
 def make_model(cfg: Namespace) -> Any:
     env_kwargs = make_env_kwargs(cfg)
-    env = E.NavToCenter(is_eval=False, **env_kwargs)
+    env = cfg.environment(is_eval=False, **env_kwargs)
     policy_kwargs = _make_policy_kwargs(cfg)
     alg_kwargs = {
         "n_steps": cfg.n_steps,

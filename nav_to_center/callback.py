@@ -81,8 +81,6 @@ class LoggingCallback(EventCallback):
 
         entropy = util.get_entropy(bn_activations)
         self.writer.add_scalar("entropy", entropy, self.num_timesteps)
-        self.writer.add_histogram("bns", np.log10(bn_activations.mean(0).clip(1e-6)), self.num_timesteps)
-        # self.writer.add_scalar("bn_sp", (bn_activations.mean(0) < 1e-5).sum(), self.num_timesteps)
 
         if self.log_path is not None:
             self.evaluations_timesteps.append(self.num_timesteps)

@@ -35,7 +35,7 @@ def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     with (log_dir / "config.pkl").open("wb") as binary_fo:
         pkl.dump(cfg, binary_fo)
     env_kwargs = util.make_env_kwargs(cfg)
-    env_eval = DummyVecEnv([lambda: env.NavToCenter(is_eval=True, **env_kwargs)])
+    env_eval = DummyVecEnv([lambda: cfg.environment(is_eval=True, **env_kwargs)])
     logging_callback = LoggingCallback(
         eval_env=env_eval,
         n_eval_episodes=cfg.eval_episodes_logging,
@@ -92,6 +92,8 @@ def patch_old_configs(cfg: Namespace) -> Namespace:
     ```
 
     """
+    if not hasattr(cfg, "biased_reward_shaping"):
+        cfg.biased_reward_shaping = False
     return cfg
 
 
@@ -119,9 +121,10 @@ def collect_metrics(
     env_kwargs: Dict[str, Any] = {
         **util.make_env_kwargs(cfg),
         "is_eval": True,
-        "world_radius": _cfg.eval_world_radius,
     }
-    environment = env.NavToCenter(**env_kwargs)
+    if cfg.environment == env.NavToCenter:
+        env_kwargs["world_radius"] = _cfg.eval_world_radius
+    environment = cfg.environment(**env_kwargs)
     model = util.make_model(cfg)
     if model is None:
         print(f'Could not restore model "{cfg.init_model_path}"')
@@ -140,17 +143,13 @@ def collect_metrics(
     n_episodes = 0
     discretize = True
 
-    g_rad = environment.goal_radius / environment.world_radius
-    lo = int(np.ceil(eval_episodes * g_rad ** 2))
-    hi = int(np.ceil(eval_episodes / (1 - g_rad ** 2)))
-
     # The index is passed to the initialization. We start with lo so that that
     # the agent is not intialized in the center.
     # TODO Fix initialization so we don't have to compute lo manually.
-    for i in range(lo, hi):
+    for i in range(eval_episodes):
         n_episodes += 1
         environment.reset()
-        environment.fib_disc_init(i, hi)
+        environment.fib_disc_init(i, eval_episodes)
         results = util.eval_episode(
             policy, mlp_extractor, environment, discretize
         )

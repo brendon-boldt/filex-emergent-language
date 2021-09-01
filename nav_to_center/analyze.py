@@ -1,6 +1,6 @@
 import argparse
 from pathlib import Path
-from typing import Any, List, Tuple, Dict, Union, Iterator, Optional
+from typing import Any, List, Tuple, Dict, Union, Iterator, Optional, Callable
 from itertools import product
 import math
 
@@ -46,12 +46,14 @@ def iter_groups(
         yield vals, filtered, axes
 
 
-def make_snowflake_plot(
+def make_snowflake_plots(
     df: pd.DataFrame,
-    groups: List[str],
-    path: Path,
-    plot_shape: Optional[Tuple[int, int]] = None,
+    cfg: Dict,
 ) -> None:
+    path = cfg['path']
+    groups = cfg['groups']
+    plot_shape = None
+
     if not path.exists():
         path.mkdir()
     path = path / "starfish"
@@ -69,9 +71,7 @@ def make_snowflake_plot(
             except Exception:
                 continue
             uses = np.array(eval(row.usages))
-            axis.set_title(f"{row.pe:.3f}", loc="left", y=0.9)
-            # axis.set_title(f"{clusters:.2f}")
-            # axis.set_title(f"{row.fractional:.2f} - {clusters} - {row.steps:.1f}")
+            axis.set_title(f"{row.success_rate:.2f} - {row.entropy:.3f}", loc="left", y=0.9)
             for vector, use in zip(vectors, uses):
                 norm = (vector ** 2).sum() ** 0.5
                 vector /= max(norm, 1.0)
@@ -110,8 +110,9 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         ax.scatter(df[ind_var], df[dep_var], s=0.5)
         ticks: List[Union[int, float]]
         if dep_var == "entropy":
-            ax.set_ylim(1.5, 5.1)
-            ax.set_yticks([2, 3, 4, 5])
+            # ax.set_ylim(1.5, 5.1)
+            # ax.set_yticks([2, 3, 4, 5])
+            ax.set_ylim(1.5, 7.1)
             pass
         if ind_var == "bottleneck_size_log":
             ax.set_ylim(2.9, 8.1)
@@ -162,16 +163,25 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         do_group(df, "default")
 
 
-def preprocess_data(df: pd.DataFrame) -> None:
-    df.drop(np.flatnonzero(df["success_rate"] < 1.0), inplace=True)
+def preprocess_data(df: pd.DataFrame, cfg: Dict) -> None:
+    if cfg.get('drop_unsuccessful', True):
+        df.drop(np.flatnonzero(df["success_rate"] < 1.0), inplace=True)
     df["bottleneck_temperature_log"] = np.log2(df["bottleneck_temperature"])
-    if "rs_multiplier" in df.columns:
-        df["sparsity"] = 1 / df["rs_multiplier"]
-    df["sparsity_log"] = np.log10(df["sparsity"])
-    df["learning_rate_log"] = np.log10(df["learning_rate"])
-    df["world_radius_log"] = np.log2(df["world_radius"])
     df["bottleneck_size"] = df["pre_bottleneck_arch"].apply(lambda x: eval(x)[-1])
-    df["bottleneck_size_log"] = np.log2(df["bottleneck_size"])
+
+    logificanda: List[Tuple[str, Callable]] = [
+        ("sparsity", np.log10),
+        ("learning_rate", np.log10),
+        ("world_radius", np.log2),
+        ("goal_radius", np.log2),
+        ("bottleneck_size", np.log2),
+        ("n_steps", np.log2),
+        ("total_timesteps", np.log10),
+        ("bottleneck_temperature", np.log2),
+    ]
+
+    for name, log in logificanda:
+        df[name + '_log'] = log(df[name])
 
 
 def get_args() -> argparse.Namespace:
@@ -192,7 +202,9 @@ def main() -> None:
 
     data_path = Path(cfg["path"])
     dataframe = pd.read_csv(data_path / "data.csv").fillna("None")
-    preprocess_data(dataframe)
+    preprocess_data(dataframe, cfg)
 
     if cfg["type"] == "correlation":
         analyze_correlation(dataframe, cfg)
+    if cfg["type"] == "snowflake":
+        make_snowflake_plots(dataframe, cfg)
