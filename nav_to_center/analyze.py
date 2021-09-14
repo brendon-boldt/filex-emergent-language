@@ -23,16 +23,16 @@ def iter_groups(
             continue
         if plot_shape is not None:
             filtered = filtered[: plot_shape[0] * plot_shape[1]]
-            # random_idxs = np.random.default_rng().choice(
-            #     len(filtered),
-            #     min(len(filtered), np.prod(plot_shape)),
-            #     replace=False,
-            # )
-            # filtered = filtered.iloc[random_idxs]
+            if random_idxs := False:
+                random_idxs = np.random.default_rng().choice(
+                    len(filtered),
+                    min(len(filtered), np.prod(plot_shape)),
+                    replace=False,
+                )
+                filtered = filtered.iloc[random_idxs]
         else:
             row_len = math.ceil(math.sqrt(len(filtered)))
             plot_shape = row_len, row_len
-            # figsize = (8, 8)
         if not no_axes:
             figsize = 4 * plot_shape[1], 4 * plot_shape[0]
             fig, axes = plt.subplots(*plot_shape, figsize=figsize)
@@ -56,7 +56,6 @@ def make_snowflake_plots(
     path = cfg['path']
     groups = cfg['groups']
     plot_shape = (3, 2)
-    # plot_shape = (300, 1)
 
     if not path.exists():
         path.mkdir()
@@ -66,15 +65,7 @@ def make_snowflake_plots(
 
 
     for vals, filtered, axes in iter_groups(df, groups, plot_shape, no_axes=False):
-        # sorted_rows = filtered.sort_values("uuid").itertuples()
-        sorted_rows = filtered.itertuples()
-
-        # fig = plt.figure(figsize=(2, 2))
-        # ax = fig.add_axes([0, 0, 1, 1])
-
-        for axis, row in zip(axes.reshape(-1), sorted_rows):
-        # for row in sorted_rows:
-            # axis = ax
+        for axis, row in zip(axes.reshape(-1), filtered):
             axis.axis("off")
             axis.set_xlim(-1.1, 1.1)
             axis.set_ylim(-1.1, 1.1)
@@ -83,7 +74,6 @@ def make_snowflake_plots(
             except Exception:
                 continue
             uses = np.array(eval(row.usages))
-            # axis.set_title(f"{row.success_rate:.2f} - {row.entropy:.3f}", loc="left", y=0.9)
             for vector, use in zip(vectors, uses):
                 norm = (vector ** 2).sum() ** 0.5
                 vector /= max(norm, 1.0)
@@ -97,8 +87,7 @@ def make_snowflake_plots(
                 )
         name = "lexmap_" + "_".join(str(v).replace(".", ",") for v in vals)
         plt.savefig(path / f"{name}.png", format="png")
-        # plt.savefig(path / name)
-        # plt.close()
+        plt.close()
 
 
 def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
@@ -123,29 +112,18 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         ax.scatter(group[ind_var], group[dep_var], s=2.0)
         ticks: List[Union[int, float]]
         if dep_var == "entropy":
-            # ax.set_ylim(1.5, 5.1)
-            # ax.set_yticks([2, 3, 4, 5])
             ax.set_ylabel("Entropy (bits)")
             max_ent = group['bottleneck_size_log'].max()
             ax.set_ylim(1.5, max_ent + 0.1)
-            pass
         if ind_var == "n_steps_log":
             ticks = [30, 300, 3000]
             ax.set_xticks([np.log2(x) for x in ticks])
             ax.set_xticklabels(ticks)
-            # ax.set_xlim(0.8, np.log2(22))
-            # ax.set_yticks([3, 3.5, 4, 4.5])
-            # ax.set_ylim(2.8, 4.9)
             ax.set_xlabel("Rollout Buffer Size")
         if ind_var == "world_radius_log":
-            pass
             ticks = [2, 4, 8, 16, 32]
             ax.set_xticks([np.log2(x) for x in ticks])
             ax.set_xticklabels(ticks)
-            # ax.set_xlim(0.8, np.log2(22))
-            # ax.set_yticks([3, 3.5, 4, 4.5])
-            # ax.set_ylim(2.8, 4.9)
-            # ax.set_ylabel("Entropy (bits)")
             ax.set_xlabel("World Radius")
         ax.set_xlim(df[ind_var].min() - 0.1, df[ind_var].max() + 0.1)
         fn = f"{ind_var}-{dep_var}-{name}".replace(".", ",")
@@ -172,14 +150,8 @@ def make_histograms(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
     ax.set(yticklabels=[], ylabel=None, yticks=[])
     ax.set_xlabel("Entropy (bits)")
 
-    # if "groups" in cfg:
     smallest_group = min(sum(x) for x in df.groupby(cfg["groups"]).indices.values())
-    # n_bins = smallest_group // 70
     n_bins = 40
-    # vmax = df[dep_var].max()
-    # vmin = df[dep_var].min()
-    # vmax = df[dep_var].mean() + df[dep_var].std() * 3
-    # vmin = df[dep_var].mean() - df[dep_var].std() * 3
     vmax = 3.5
     vmin = 0.6
     bins = [vmin + i * (vmax-vmin) / n_bins for i in range(n_bins)]
@@ -189,8 +161,6 @@ def make_histograms(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         else:
             kt = k
         ax.hist(df.iloc[v][dep_var], bins=bins, density=True, alpha=0.5)
-    # else:
-    #     do_group(df, "default")
     fn = f"histogram-{dep_var}".replace(".", ",")
     plt.savefig(cfg["path"] / f"{fn}.pdf", bbox_inches="tight", format="pdf")
     plt.close()

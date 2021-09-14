@@ -56,10 +56,12 @@ class BottleneckExtractor(nn.Module):
         self.latent_dim_vf = pre_arch[-1]
 
         self.backward_log: List = []
+
         def backward_hook(module, grad_input, grad_output) -> None:
             pass
             # self.backward_log.append(grad_output[0].detach().numpy())
             # self.backward_log.append(grad_input[0].detach().numpy())
+
         # self.pre_net.register_full_backward_hook(backward_hook)
         # self.post_net.register_full_backward_hook(backward_hook)
 

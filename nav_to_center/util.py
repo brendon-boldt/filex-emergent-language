@@ -54,10 +54,10 @@ def eval_episode(policy, fe, env, discretize) -> Dict[str, Any]:
     policy.mlp_extractor.bottleneck = original_bottlenck
     total_reward = float(info["at_goal"])
     return {
-            'steps': steps,
-            'bn_activations': bns,
-            'bn_logits': logitss,
-            'total_reward': total_reward,
+        "steps": steps,
+        "bn_activations": bns,
+        "bn_logits": logitss,
+        "total_reward": total_reward,
     }
 
 

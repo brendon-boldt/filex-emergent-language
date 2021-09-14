@@ -10,8 +10,8 @@ default_config = argparse.Namespace(
     environment=env.NavToCenter,
     bottleneck_temperature=1.5,
     bottleneck_hard=False,
-    pre_bottleneck_arch=[0x20, 0x40],
-    post_bottleneck_arch=[0x20],
+    pre_bottleneck_arch=[2 ** 5, 2 ** 6],
+    post_bottleneck_arch=[2 ** 5],
     policy_activation="tanh",
     eval_freq=5_000,
     total_timesteps=100_000,
@@ -29,7 +29,7 @@ default_config = argparse.Namespace(
     max_step_scale=3.0,
     gamma=0.9,
     sparsity=float("inf"),
-    biased_reward_shaping=0.0,
+    biased_reward_shaping=False,
 )
 
 sparsities = [1, float("inf")]
@@ -98,7 +98,7 @@ def temperature() -> Iterator[Dict]:
 
 def world_radius() -> Iterator[Dict]:
     for sparsity in sparsities:
-        for x in log_range(2, 40, 100):
+        for x in log_range(2, 40, 300):
             yield {
                 "world_radius": x,
                 "sparsity": sparsity,
@@ -123,18 +123,37 @@ def nav_to_edges() -> Iterator[Dict]:
         "goal_radius": 8.0,
         "n_steps": 0x100,
         "batch_size": 0x100,
-        "total_timesteps": 40_000,
     }
-    for x in sparsities:
+    for i in range(20):
+        for x in sparsities:
+            yield {
+                "sparsity": x,
+                "iter": i,
+                **base,
+            }
         yield {
-            "sparsity": x,
+            "biased_reward_shaping": True,
+            "sparsity": 1,
+            "iter": i,
             **base,
         }
-    # yield {
-    #     "biased_reward_shaping": True,
-    #     "sparsity": 1,
-    #     **base,
-    # }
+
+
+def entropy_histogram() -> Iterator[Dict]:
+    base = {
+        "environment": env.NavToEdges,
+        "world_radius": 8.0,
+        "goal_radius": 8.0,
+        "n_steps": 0x100,
+        "batch_size": 0x100,
+    }
+    for i in range(2000):
+        for x in sparsities:
+            yield {
+                "sparsity": x,
+                "iter": i,
+                **base,
+            }
 
 
 def buffer_size() -> Iterator[Dict]:
@@ -142,11 +161,12 @@ def buffer_size() -> Iterator[Dict]:
         for x in log_range(2 ** 5, 2 ** 12, 200):
             yield {
                 "n_steps": int(x),
-                "batch_size": int(x),
+                # "batch_size": int(x),
+                # "batch_size": min(int(x), default_config.batch_size),
                 "sparsity": sparsity,
+                # Prevent name collisions due to int(x)
                 "note": x,
                 "total_timesteps": 200_000,
-                "pre_bottleneck_arch": [0x20, 0x40],
             }
 
 

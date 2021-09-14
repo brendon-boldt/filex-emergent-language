@@ -81,15 +81,12 @@ class Navigation(gym.Env, ABC):
         if (self.num_steps > 0 and at_goal) or self.num_steps > self.max_steps:
             self.stop = True
 
-        # prev_vec = action - self.location
-        # cosine_sim = cosine_similarity(prev_vec, action)
         if self.is_eval:
             reward = float(at_goal)
             info["at_goal"] = at_goal
         else:
             info["at_goal"] = at_goal
             reward = 0.0
-            # reward += (cosine_sim - 1) / self.sparsity
             # Shaped reward of +1 for moving towards the goal one step
             reward += self._get_shaped_reward() / self.sparsity
             if self.stop and at_goal:
@@ -128,6 +125,7 @@ class Navigation(gym.Env, ABC):
     def _reset_location(self) -> None:
         pass
 
+
 class NavToCenter(Navigation):
     def __init__(self, *, world_radius: float, **kwargs) -> None:
         self.world_scale = world_radius
@@ -160,7 +158,6 @@ class NavToCenter(Navigation):
             raise ValueError(f"Index i={i} initializes agent within the goal.")
         self.location = r * np.array([np.cos(theta), np.sin(theta)])
         return self.get_observation()
-
 
 
 class NavToEdges(Navigation):

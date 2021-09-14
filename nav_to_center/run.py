@@ -150,12 +150,10 @@ def collect_metrics(
         n_episodes += 1
         environment.reset()
         environment.fib_disc_init(i, eval_episodes)
-        results = util.eval_episode(
-            policy, mlp_extractor, environment, discretize
-        )
-        successes += results['total_reward']
-        steps_values.append(results['steps'])
-        bottleneck_values.extend(results['bn_activations'])
+        results = util.eval_episode(policy, mlp_extractor, environment, discretize)
+        successes += results["total_reward"]
+        steps_values.append(results["steps"])
+        bottleneck_values.extend(results["bn_activations"])
     np_bn_values = np.stack(bottleneck_values)
     entropy = util.get_entropy(np_bn_values)
     sample_id = str(uuid.uuid4())
@@ -216,7 +214,11 @@ def aggregate_results(
     out_dir = Path("results") / Path(path_strs[0]).name
     if not out_dir.exists():
         out_dir.mkdir(parents=True)
-    paths = [x for p in path_strs for x in expand_paths(Path("log") / p, progression, target_ts)]
+    paths = [
+        x
+        for p in path_strs
+        for x in expand_paths(Path("log") / p, progression, target_ts)
+    ]
     jobs = [delayed(collect_metrics)(p, out_dir, _cfg.eval_episodes) for p in paths]
     results = [
         r for r in Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs)) if r is not None

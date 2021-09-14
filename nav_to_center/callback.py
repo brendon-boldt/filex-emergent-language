@@ -75,9 +75,9 @@ class LoggingCallback(EventCallback):
             )
             results.append(ep_results)
 
-        episode_rewards = [r['total_reward'] for r in results]
-        episode_lengths = [r['steps'] for r in results]
-        bn_activations = np.concatenate([r['bn_activations'] for r in results])
+        episode_rewards = [r["total_reward"] for r in results]
+        episode_lengths = [r["steps"] for r in results]
+        bn_activations = np.concatenate([r["bn_activations"] for r in results])
 
         entropy = util.get_entropy(bn_activations)
         self.writer.add_scalar("entropy", entropy, self.num_timesteps)

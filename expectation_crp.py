@@ -7,18 +7,18 @@ from joblib import Parallel, delayed  # type: ignore
 from nav_to_center.experiment_configs import log_range
 
 
-
 def entropy(counts):
     x = counts / max(counts.sum(), 1)
     x = x[x > 0]
     return -(x * np.log2(x)).sum()
 
+
 def do_run(
-        alpha,
-        beta,
-        time_steps,
-        dirichlet=False,
-        ):
+    alpha,
+    beta,
+    time_steps,
+    dirichlet=False,
+):
     counts = np.zeros((max_size,), dtype=np.float32)
     counts[0] = 1.0
     xs = []
@@ -36,9 +36,9 @@ def do_run(
         #     # xs.append(entropy(counts))
     return entropy(counts)
 
+
 max_size = 2 ** 12
 eye = np.eye(max_size)
-
 
 
 xs = []
@@ -61,7 +61,7 @@ lo = 1
 hi = 1000
 for val in log_range(lo, hi, n):
     val = int(val)
-    params['beta'] = val
+    params["beta"] = val
     xs.append(val)
     jobs.append(delayed(do_run)(**params))
 ys = Parallel(n_jobs=20)(j for j in tqdm(jobs))
