@@ -4,7 +4,7 @@ import matplotlib
 from tqdm import tqdm  # type: ignore
 from joblib import Parallel, delayed  # type: ignore
 
-from nav_to_center.experiment_configs import log_range
+from .experiment_configs import log_range
 
 
 def entropy(counts):
