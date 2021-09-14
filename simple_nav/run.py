@@ -6,6 +6,7 @@ import pickle as pkl
 import shutil
 import uuid
 import re
+import warnings
 
 from stable_baselines3.common.vec_env import DummyVecEnv  # type: ignore
 import torch  # type: ignore
@@ -24,6 +25,10 @@ _cfg = experiment_configs.default_config
 
 
 def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
+    # Ignore warnings about non-matching batch size
+    if cfg.cfg_name == "buffer_size":
+        warnings.filterwarnings("ignore", module="stable_baselines3")
+
     log_dir = base_dir / f"run-{idx}"
     if (log_dir / "completed").exists():
         return
@@ -71,6 +76,7 @@ def run_experiments(
     for config in getattr(experiment_configs, exp_name)():
         final_config = {**vars(_cfg), **config}
         cfg = Namespace(**final_config)
+        cfg.cfg_name = exp_name
         jobs.extend(
             execute_configuration(out_path, cfg, list(config.keys()), num_trials)
         )
@@ -117,6 +123,9 @@ def collect_metrics(
 ) -> Optional[pd.DataFrame]:
     with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
+    # Ignore warnings about non-matching batch size
+    if cfg.cfg_name == "buffer_size":
+        warnings.filterwarnings("ignore", module="stable_baselines3")
     cfg = patch_old_configs(cfg)
     env_kwargs: Dict[str, Any] = {
         **util.make_env_kwargs(cfg),
