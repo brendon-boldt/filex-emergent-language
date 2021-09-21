@@ -67,9 +67,6 @@ int main()
     const double lo = 0;
     const double hi = 3;
 
-    unsigned int seeds[n];
-    for (int i = 0; i < n; ++i)
-        seeds[i] = rand();
     double xs[n];
     double ys[n];
 
@@ -77,11 +74,12 @@ int main()
     {
         int threadnum = omp_get_thread_num();
         int numthreads = omp_get_num_threads();
+        unsigned int seed = rand();
         for (int i = threadnum; i < n; i += numthreads)
         {
             int beta = (int) pow(10, lo + i * (hi - lo) / (n - 1));
             xs[i] = pow(10, lo + i * (hi - lo) / (n - 1));
-            ys[i] = ecrp(alpha, beta, steps, &seeds[i]);
+            ys[i] = ecrp(alpha, beta, steps, &seed);
         }
     }
     for (int i = 0; i < n; ++i)
