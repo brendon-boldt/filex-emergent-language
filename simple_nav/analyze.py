@@ -22,14 +22,15 @@ def iter_groups(
         if not len(filtered):
             continue
         if plot_shape is not None:
-            filtered = filtered[: plot_shape[0] * plot_shape[1]]
-            if random_idxs := False:
+            if random_idxs := True:
                 random_idxs = np.random.default_rng().choice(
                     len(filtered),
                     min(len(filtered), np.prod(plot_shape)),
                     replace=False,
                 )
                 filtered = filtered.iloc[random_idxs]
+            else:
+                filtered = filtered[: plot_shape[0] * plot_shape[1]]
         else:
             row_len = math.ceil(math.sqrt(len(filtered)))
             plot_shape = row_len, row_len
@@ -65,7 +66,7 @@ def make_snowflake_plots(
 
 
     for vals, filtered, axes in iter_groups(df, groups, plot_shape, no_axes=False):
-        for axis, row in zip(axes.reshape(-1), filtered):
+        for axis, row in zip(axes.reshape(-1), filtered.itertuples()):
             axis.axis("off")
             axis.set_xlim(-1.1, 1.1)
             axis.set_ylim(-1.1, 1.1)
@@ -81,7 +82,7 @@ def make_snowflake_plots(
                     [0, vector[0]],
                     [0, vector[1]],
                     color="blue",
-                    alpha=use / max(uses) / len(filtered),
+                    alpha=use / max(uses),
                     linewidth=8,
                     solid_capstyle="round",
                 )
@@ -116,7 +117,7 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
             max_ent = group['bottleneck_size_log'].max()
             ax.set_ylim(1.5, max_ent + 0.1)
         if ind_var == "n_steps_log":
-            ticks = [30, 300, 3000]
+            ticks = [40, 300, 3000]
             ax.set_xticks([np.log2(x) for x in ticks])
             ax.set_xticklabels(ticks)
             ax.set_xlabel("Rollout Buffer Size")
@@ -143,6 +144,8 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
 
 
 def make_histograms(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
+    # This function is not fully parameterized since we only generate one
+    # histogram for the paper.
     dep_var = cfg["dep_var"]
 
     fig = plt.figure(figsize=(2, 1.5))
@@ -151,16 +154,24 @@ def make_histograms(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
     ax.set_xlabel("Entropy (bits)")
 
     smallest_group = min(sum(x) for x in df.groupby(cfg["groups"]).indices.values())
-    n_bins = 40
-    vmax = 3.5
-    vmin = 0.6
+    n_bins = 30
+    vmin = 1.8
+    vmax = 5.3
     bins = [vmin + i * (vmax-vmin) / n_bins for i in range(n_bins)]
+    # bins = None
     for k, v in df.groupby(cfg["groups"]).indices.items():
         if not isinstance(k, tuple):
             kt: Tuple = (k,)
         else:
             kt = k
-        ax.hist(df.iloc[v][dep_var], bins=bins, density=True, alpha=0.5)
+        ax.hist(
+            df.iloc[v][dep_var],
+            bins=bins,
+            density=True,
+            alpha=0.5,
+            label = "Shaping" if df.iloc[v[0]]['sparsity'] < float('inf') else "No Shaping",
+        )
+    ax.legend(fontsize="small")
     fn = f"histogram-{dep_var}".replace(".", ",")
     plt.savefig(cfg["path"] / f"{fn}.pdf", bbox_inches="tight", format="pdf")
     plt.close()

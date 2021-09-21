@@ -142,9 +142,9 @@ def nav_to_edges() -> Iterator[Dict]:
 
 def entropy_histogram() -> Iterator[Dict]:
     base = {
-        "environment": env.NavToEdges,
-        "world_radius": 8.0,
-        "goal_radius": 8.0,
+        # "environment": env.NavToEdges,
+        # "world_radius": 8.0,
+        # "goal_radius": 8.0,
         "n_steps": 0x100,
         "batch_size": 0x100,
     }

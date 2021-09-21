@@ -34,7 +34,7 @@ The results of the linear regression analysis will be printed to the screen; the
 
 
 We use the following experiment and analysis configurations in the paper:
-- `world_radius`
 - `nav_to_edges`
 - `entropy_histogram`
+- `world_radius`
 - `buffer_size`
