@@ -37,7 +37,7 @@ python -m simple_nav.expectation_crp -4
 ```
 If you have a need for speed you can compile and run the code in C instead:
 ```
-make -C c/ && c/./ecrp > data.csv
+make -C c/ && ./c/ecrp > data.csv
 python -m simple_nav.expectation_crp data.csv
 ```
 The plot is written to `results/`.

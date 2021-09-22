@@ -67,7 +67,6 @@ def main(args) -> None:
     ax.set_xticklabels(ticks)
     ax.set_xlabel(r"$\beta$")
     ax.set_ylabel("Entropy (bits)")
-    ax.set_yticks([3, 4, 5])
 
     fig.savefig("results/ecrp.png", bbox_inches="tight", format="png", dpi=600)
 
