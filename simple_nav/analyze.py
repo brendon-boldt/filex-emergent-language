@@ -14,7 +14,10 @@ from . import analysis_configs
 
 
 def iter_groups(
-    df: pd.DataFrame, groups: List[str], plot_shape: Optional[Tuple[int, int]], no_axes=False,
+    df: pd.DataFrame,
+    groups: List[str],
+    plot_shape: Optional[Tuple[int, int]],
+    no_axes=False,
 ) -> Iterator[Tuple[List, pd.DataFrame, matplotlib.axes.Axes]]:
     valss = product(*(df[groups[i]].unique() for i in range(len(groups))))
     for vals in valss:
@@ -54,8 +57,8 @@ def make_snowflake_plots(
     df: pd.DataFrame,
     cfg: Dict,
 ) -> None:
-    path = cfg['path']
-    groups = cfg['groups']
+    path = cfg["path"]
+    groups = cfg["groups"]
     plot_shape = (3, 2)
 
     if not path.exists():
@@ -63,7 +66,6 @@ def make_snowflake_plots(
     path = path / "starfish"
     if not path.exists():
         path.mkdir()
-
 
     for vals, filtered, axes in iter_groups(df, groups, plot_shape, no_axes=False):
         for axis, row in zip(axes.reshape(-1), filtered.itertuples()):
@@ -87,7 +89,7 @@ def make_snowflake_plots(
                     solid_capstyle="round",
                 )
         name = "lexmap_" + "_".join(str(v).replace(".", ",") for v in vals)
-        plt.savefig(path / f"{name}.png", format="png")
+        plt.savefig(path / f"{name}.pdf", format="pdf")
         plt.close()
 
 
@@ -114,7 +116,7 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         ticks: List[Union[int, float]]
         if dep_var == "entropy":
             ax.set_ylabel("Entropy (bits)")
-            max_ent = group['bottleneck_size_log'].max()
+            max_ent = group["bottleneck_size_log"].max()
             ax.set_ylim(1.5, max_ent + 0.1)
         if ind_var == "n_steps_log":
             ticks = [40, 300, 3000]
@@ -157,7 +159,7 @@ def make_histograms(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
     n_bins = 30
     vmin = 1.8
     vmax = 5.3
-    bins = [vmin + i * (vmax-vmin) / n_bins for i in range(n_bins)]
+    bins = [vmin + i * (vmax - vmin) / n_bins for i in range(n_bins)]
     # bins = None
     for k, v in df.groupby(cfg["groups"]).indices.items():
         if not isinstance(k, tuple):
@@ -169,7 +171,7 @@ def make_histograms(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
             bins=bins,
             density=True,
             alpha=0.5,
-            label = "Shaping" if df.iloc[v[0]]['sparsity'] < float('inf') else "No Shaping",
+            label="Shaped" if df.iloc[v[0]]["sparsity"] < float("inf") else "No Shaped",
         )
     ax.legend(fontsize="small")
     fn = f"histogram-{dep_var}".replace(".", ",")
@@ -177,12 +179,11 @@ def make_histograms(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
     plt.close()
 
 
-
 def preprocess_data(df: pd.DataFrame, cfg: Dict) -> None:
-    if cfg.get('drop_unsuccessful', True):
+    if cfg.get("drop_unsuccessful", True):
         df.drop(np.flatnonzero(df["success_rate"] < 1.0), inplace=True)
 
-    for k, v in cfg.get('drop_kv', []):
+    for k, v in cfg.get("drop_kv", []):
         df.drop(np.flatnonzero(df[k] == v), inplace=True)
 
     df["bottleneck_temperature_log"] = np.log2(df["bottleneck_temperature"])
@@ -200,7 +201,7 @@ def preprocess_data(df: pd.DataFrame, cfg: Dict) -> None:
     ]
 
     for name, log in logificanda:
-        df[name + '_log'] = log(df[name])
+        df[name + "_log"] = log(df[name])
 
 
 def get_args() -> argparse.Namespace:

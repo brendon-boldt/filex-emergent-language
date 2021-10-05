@@ -7,6 +7,7 @@ import argparse
 
 from .experiment_configs import log_range
 
+
 def entropy(counts):
     x = counts / max(counts.sum(), 1)
     x = x[x > 0]
@@ -28,6 +29,7 @@ def do_run(
         probs /= probs.sum()
         counts += eye[rng.choice(len(counts), beta, p=probs)].sum(0) / beta
     return entropy(counts)
+
 
 def main(args) -> None:
     xs = []
@@ -70,11 +72,13 @@ def main(args) -> None:
 
     fig.savefig("results/ecrp.png", bbox_inches="tight", format="png", dpi=600)
 
+
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("data_path", type=str, nargs="?")
     parser.add_argument("-j", type=int, default=1)
     return parser.parse_args()
+
 
 if __name__ == "__main__":
     main(get_args())

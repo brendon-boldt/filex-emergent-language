@@ -33,7 +33,7 @@ The results of the linear regression analysis will be printed to the screen; the
 The expectation Chinese restaurant process uses a different framework for running.
 You can run the experiment in Python using:
 ```
-python -m simple_nav.expectation_crp -4
+python -m simple_nav.expectation_crp -j4
 ```
 If you have a need for speed you can compile and run the code in C instead:
 ```
@@ -47,8 +47,8 @@ The plot is written to `results/`.
 
 
 We use the following experiment and analysis configurations in the paper:
-- `nav_to_edges`
-- `entropy_histogram`
-- `world_radius`
-- `buffer_size`
+- `nav_to_edges` (Biased Semantics)
+- `entropy_histogram` (Changing the Distribution of Entropy)
+- `world_radius` (Masking Environmental Parameters)
+- `buffer_size` (Experience Buffer Size)
 The expectation Chinese restaurant process (see above) is also used.

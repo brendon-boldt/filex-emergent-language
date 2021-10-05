@@ -1,3 +1,16 @@
+"""
+Configurations for experiments
+
+Configurations that are used in the paper are annotated with the comment PAPER
+
+Each "configuration" is a function which generates an iterator of dictionaries.
+Each dictionary should contain the hyperparameters that are different from the
+default.  Note that if any yielded dictionary is exactly the same to another
+one in the experiment, They will overwrite each other. This can be avoided by
+adding a dummy parameter like `{"note": i}` for each iteration of the config
+loop.
+
+"""
 from typing import Dict, Iterator
 import argparse
 from math import pi
@@ -97,6 +110,7 @@ def temperature() -> Iterator[Dict]:
             }
 
 
+# PAPER
 def world_radius() -> Iterator[Dict]:
     for sparsity in sparsities:
         for x in log_range(2, 40, 300):
@@ -117,6 +131,7 @@ def goal_radius() -> Iterator[Dict]:
             }
 
 
+# PAPER
 def nav_to_edges() -> Iterator[Dict]:
     base = {
         "environment": env.NavToEdges,
@@ -140,11 +155,9 @@ def nav_to_edges() -> Iterator[Dict]:
         }
 
 
+# PAPER
 def entropy_histogram() -> Iterator[Dict]:
     base = {
-        # "environment": env.NavToEdges,
-        # "world_radius": 8.0,
-        # "goal_radius": 8.0,
         "n_steps": 0x100,
         "batch_size": 0x100,
     }
@@ -157,13 +170,12 @@ def entropy_histogram() -> Iterator[Dict]:
             }
 
 
+# PAPER
 def buffer_size() -> Iterator[Dict]:
     for sparsity in sparsities:
         for x in log_range(2 ** 5, 2 ** 12, 200):
             yield {
                 "n_steps": int(x),
-                # "batch_size": int(x),
-                # "batch_size": min(int(x), default_config.batch_size),
                 "sparsity": sparsity,
                 # Prevent name collisions due to int(x)
                 "note": x,
