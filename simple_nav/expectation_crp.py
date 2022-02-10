@@ -59,14 +59,15 @@ def main(args) -> None:
     else:
         data = np.genfromtxt(args.data_path, delimiter=",")
         xs, ys = data.transpose()
-        alpha = 0.02
+        # ys = np.array(2.0) ** ys
+        alpha = min(1, 0.02 * 10_000 / len(xs))
 
     fig = plt.figure(figsize=(2, 1.5))
     ax = fig.add_axes([0, 0, 1, 1])
     ax.scatter(np.log10(xs), ys, s=2.0, alpha=alpha)
-    ticks = [1, 10, 100, 1000]
-    ax.set_xticks([np.log10(x) for x in ticks])
-    ax.set_xticklabels(ticks)
+    # ticks = [1, 10, 100, 1000]
+    # ax.set_xticks([np.log10(x) for x in ticks])
+    # ax.set_xticklabels(ticks)
     ax.set_xlabel(r"$\beta$")
     ax.set_ylabel("Entropy (bits)")
 
