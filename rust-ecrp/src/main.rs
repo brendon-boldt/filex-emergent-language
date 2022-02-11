@@ -1,19 +1,27 @@
 use rand::prelude::*;
 use rand::distributions::Uniform;
 use rayon::prelude::*;
+use std::fs;
+use toml;
+use serde_derive::{Serialize, Deserialize};
+use std::collections::HashMap;
+use std::env;
 
-// const ALPHA: f64 = 5.0;
-// const N_TRIALS: usize = 1000;
-// const N_ITERS: usize = 1000;
-// const ARRAY_SIZE: usize = N_ITERS;
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct Config {
+    alpha: f64,
+    n_trials: usize,
+    n_iters: usize,
+    array_size: usize,
+    beta_exp_min: f64,
+    beta_exp_max: f64,
+    sample_method: String,
+    process: String,
+}
 
-const ALPHA: f64 = 1e-3;
-const N_TRIALS: usize = 200;
-const ARRAY_SIZE: usize = 0x40;
-const N_ITERS: usize = 4 * ARRAY_SIZE;
+type ConfigFile = HashMap<String, Config>;
 
-const BETA_EXP_MIN: f64 = 0.0;
-const BETA_EXP_MAX: f64 = 4.0;
+type Sampler = fn(& Vec<f64>, f64, &Uniform<f64>, &mut ThreadRng) -> usize;
 
 fn sample_categorical(
     w: & Vec<f64>,
@@ -33,7 +41,7 @@ fn sample_categorical(
 
 fn sample_softmax(
     w: & Vec<f64>,
-    n: f64,
+    _n: f64,
     dist: & Uniform<f64>,
     rng: &mut ThreadRng
 ) -> usize {
@@ -50,74 +58,88 @@ fn get_entropy(w: & Vec<f64>) -> f64 {
 
 // The ECRP should be in some capacity explanatory and in some capacity predictive.
 
-fn ecrp_fixed_buf(beta: u32) -> f64 {
+fn ecrp_fixed_buf(cfg: &Config, sample: Sampler, beta: u32) -> f64 {
     // let mut weights: Vec<f64> = Vec::with_capacity(ARRAY_SIZE);
-    let mut weights: Vec<f64> = vec![ALPHA; ARRAY_SIZE]; 
+    let scaled_alpha = cfg.alpha / cfg.array_size as f64;
+    let mut weights: Vec<f64> = vec![scaled_alpha; cfg.array_size]; 
     let mut addend_idxs: Vec<usize> = Vec::with_capacity(beta as usize);
     addend_idxs.resize(beta as usize, 0);
     let mut rng = rand::thread_rng();
     let dist = Uniform::new(0.0, 1.0);
-    for iter in 0..N_ITERS {
-        // let mut weights_len = weights.len();
-        // if weights[weights_len - 1] == 0.0 {
-        //     weights[weights_len - 1] = ALPHA;
-        // } else {
-        //     weights.push(ALPHA);
-        //     weights_len += 1;
-        // }
+    for iter in 0..cfg.n_iters {
         for b in 0..beta {
-            // let idx = sample_categorical(&weights, (iter as f64) + ALPHA * ARRAY_SIZE as f64, &dist, &mut rng);
-            let idx = sample_softmax(&weights, (iter as f64) + ALPHA * ARRAY_SIZE as f64, &dist, &mut rng);
+            let idx = sample(&weights, (iter as f64) + cfg.alpha, &dist, &mut rng);
             addend_idxs[b as usize] = idx;
         }
-        // weights[weights_len - 1] -= ALPHA;
         addend_idxs.iter().for_each(|idx| weights[*idx] += 1.0 / (beta as f64));
     }
-
     get_entropy(&weights)
 }
 
-fn ecrp(beta: u32) -> f64 {
-    let mut weights: Vec<f64> = Vec::with_capacity(ARRAY_SIZE);
+fn ecrp(cfg: &Config, sample: Sampler, beta: u32) -> f64 {
+    let mut weights: Vec<f64> = Vec::with_capacity(cfg.array_size);
     weights.push(0.0);
     let mut addend_idxs: Vec<usize> = Vec::with_capacity(beta as usize);
     addend_idxs.resize(beta as usize, 0);
     let mut rng = rand::thread_rng();
     let dist = Uniform::new(0.0, 1.0);
-    for iter in 0..N_ITERS {
+    for iter in 0..cfg.n_iters {
         let mut weights_len = weights.len();
         if weights[weights_len - 1] == 0.0 {
-            weights[weights_len - 1] = ALPHA;
+            weights[weights_len - 1] = cfg.alpha;
         } else {
-            weights.push(ALPHA);
+            weights.push(cfg.alpha);
             weights_len += 1;
         }
         for b in 0..beta {
-            // let idx = sample_categorical(&weights, (iter as f64) + ALPHA, &dist, &mut rng);
-            let idx = sample_softmax(&weights, (iter as f64) + ALPHA, &dist, &mut rng);
+            let idx = sample(&weights, (iter as f64) + cfg.alpha, &dist, &mut rng);
             addend_idxs[b as usize] = idx;
         }
-        weights[weights_len - 1] -= ALPHA;
+        weights[weights_len - 1] -= cfg.alpha;
         addend_idxs.iter().for_each(|idx| weights[*idx] += 1.0 / (beta as f64));
     }
-
-    // println!("{:?}", &weights[10..30]);
     get_entropy(&weights)
 }
 
+fn get_config() -> Config {
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 3 {
+        panic!("Two arguments required: CONFIG_FILE CONFIG_NAME")
+    }
+    let config_file = &args[1];
+    let config_name = &args[2];
+    
+    let contents = fs::read_to_string(config_file)
+        .expect("Could not read config file.");
+
+    let all_configs: ConfigFile = toml::from_str(&contents)
+        .expect("Could not parse config file.");
+
+    format!("Could not find config \"{}\" in config file", config_name);
+    all_configs.get(config_name)
+        .unwrap_or_else(|| panic!("Could not find config \"{}\" in config file", config_name)).clone()
+}
+
 fn main() {
+    let cfg = get_config();
 
-    // let foo: [f64; 4] = [0.0, 1.0, 2.0, 4.0];
-    // println!("{:?}", foo.iter().filter_map(|x| x.log2()).collect::<Vec<_>>());
-    // return;
+    let process_func = match cfg.process.as_str() {
+        "ecrp_fixed" => ecrp_fixed_buf,
+        "ecrp" => ecrp,
+        _ => panic!("Could not find process {}", cfg.process),
+    };
+    let sampler = match cfg.sample_method.as_str() {
+        "categorical" => sample_categorical,
+        "gs" => sample_softmax,
+        _ => panic!("Could not find sampling method {}", cfg.sample_method),
+    };
 
-    let results: Vec<_> = (0..N_TRIALS).into_par_iter().map(|i| {
+    let results: Vec<_> = (0..cfg.n_trials).into_par_iter().map(|i| {
     // let results: Vec<_> = (0..N_TRIALS).map(|i| {
-        let x = BETA_EXP_MIN + (BETA_EXP_MAX - BETA_EXP_MIN) * (i as f64) / (N_TRIALS as f64);
+        let x = cfg.beta_exp_min + (cfg.beta_exp_max - cfg.beta_exp_min) * (i as f64) / (cfg.n_trials as f64);
         let beta = (10.0_f64).powf(x);
         let beta_int = beta as u32;
-        // (beta, ecrp(beta_int))
-        (beta, ecrp_fixed_buf(beta_int))
+        (beta, process_func(&cfg, sampler, beta_int))
     }).collect();
     results.iter().for_each(|(x, y)| {
         println!("{},{}", x, y);
