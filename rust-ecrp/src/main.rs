@@ -1,25 +1,9 @@
+mod config;
+
 use rand::prelude::*;
 use rand::distributions::Uniform;
 use rayon::prelude::*;
-use std::fs;
-use toml;
-use serde_derive::{Serialize, Deserialize};
-use std::collections::HashMap;
 use std::env;
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct Config {
-    alpha: f64,
-    n_trials: usize,
-    n_iters: usize,
-    array_size: usize,
-    beta_exp_min: f64,
-    beta_exp_max: f64,
-    sample_method: String,
-    process: String,
-}
-
-type ConfigFile = HashMap<String, Config>;
 
 type Sampler = fn(& Vec<f64>, f64, &Uniform<f64>, &mut ThreadRng) -> usize;
 
@@ -58,32 +42,33 @@ fn get_entropy(w: & Vec<f64>) -> f64 {
 
 // The ECRP should be in some capacity explanatory and in some capacity predictive.
 
-fn ecrp_fixed_buf(cfg: &Config, sample: Sampler, beta: u32) -> f64 {
+fn ecrp_fixed_buf(cfg: &config::Config, sample: Sampler) -> f64 {
     // let mut weights: Vec<f64> = Vec::with_capacity(ARRAY_SIZE);
     let scaled_alpha = cfg.alpha / cfg.array_size as f64;
     let mut weights: Vec<f64> = vec![scaled_alpha; cfg.array_size]; 
-    let mut addend_idxs: Vec<usize> = Vec::with_capacity(beta as usize);
-    addend_idxs.resize(beta as usize, 0);
+    let mut addend_idxs: Vec<usize> = Vec::with_capacity(cfg.beta);
+    addend_idxs.resize(cfg.beta, 0);
     let mut rng = rand::thread_rng();
     let dist = Uniform::new(0.0, 1.0);
     for iter in 0..cfg.n_iters {
-        for b in 0..beta {
+        for b in 0..cfg.beta {
             let idx = sample(&weights, (iter as f64) + cfg.alpha, &dist, &mut rng);
             addend_idxs[b as usize] = idx;
         }
-        addend_idxs.iter().for_each(|idx| weights[*idx] += 1.0 / (beta as f64));
+        addend_idxs.iter().for_each(|idx| weights[*idx] += 1.0 / (cfg.beta as f64));
     }
     get_entropy(&weights)
 }
 
-fn ecrp(cfg: &Config, sample: Sampler, beta: u32) -> f64 {
+fn ecrp(cfg: &config::Config, sample: Sampler) -> f64 {
     let mut weights: Vec<f64> = Vec::with_capacity(cfg.array_size);
     weights.push(0.0);
-    let mut addend_idxs: Vec<usize> = Vec::with_capacity(beta as usize);
-    addend_idxs.resize(beta as usize, 0);
+    let mut addend_idxs: Vec<usize> = Vec::with_capacity(cfg.beta);
+    addend_idxs.resize(cfg.beta, 0);
     let mut rng = rand::thread_rng();
     let dist = Uniform::new(0.0, 1.0);
-    for iter in 0..cfg.n_iters {
+    let n_iters: u64 = (cfg.n_iters as f64 / cfg.beta as f64) as u64;
+    for iter in 0..n_iters {
         let mut weights_len = weights.len();
         if weights[weights_len - 1] == 0.0 {
             weights[weights_len - 1] = cfg.alpha;
@@ -91,57 +76,42 @@ fn ecrp(cfg: &Config, sample: Sampler, beta: u32) -> f64 {
             weights.push(cfg.alpha);
             weights_len += 1;
         }
-        for b in 0..beta {
+        for b in 0..cfg.beta {
             let idx = sample(&weights, (iter as f64) + cfg.alpha, &dist, &mut rng);
             addend_idxs[b as usize] = idx;
         }
         weights[weights_len - 1] -= cfg.alpha;
-        addend_idxs.iter().for_each(|idx| weights[*idx] += 1.0 / (beta as f64));
+        addend_idxs.iter().for_each(|idx| weights[*idx] += 1.0 / (cfg.beta as f64));
     }
     get_entropy(&weights)
 }
 
-fn get_config() -> Config {
+fn get_config() -> String {
     let args: Vec<String> = env::args().collect();
-    if args.len() != 3 {
-        panic!("Two arguments required: CONFIG_FILE CONFIG_NAME")
+    if args.len() != 2 {
+        panic!("One argument is required: CONFIG_NAME");
     }
-    let config_file = &args[1];
-    let config_name = &args[2];
-    
-    let contents = fs::read_to_string(config_file)
-        .expect("Could not read config file.");
-
-    let all_configs: ConfigFile = toml::from_str(&contents)
-        .expect("Could not parse config file.");
-
-    format!("Could not find config \"{}\" in config file", config_name);
-    all_configs.get(config_name)
-        .unwrap_or_else(|| panic!("Could not find config \"{}\" in config file", config_name)).clone()
+    return args[1].clone();
 }
 
 fn main() {
-    let cfg = get_config();
+    let config_name = get_config();
+    let configs = config::get_configs(config_name);
 
-    let process_func = match cfg.process.as_str() {
-        "ecrp_fixed" => ecrp_fixed_buf,
-        "ecrp" => ecrp,
-        _ => panic!("Could not find process {}", cfg.process),
-    };
-    let sampler = match cfg.sample_method.as_str() {
-        "categorical" => sample_categorical,
-        "gs" => sample_softmax,
-        _ => panic!("Could not find sampling method {}", cfg.sample_method),
-    };
+    let results = configs.into_par_iter().map(|cfg| {
+        let process_func = match cfg.process {
+            config::Process::Fixed => ecrp_fixed_buf,
+            config::Process::Base=> ecrp,
+        };
+        let sampler = match cfg.sample_method {
+            config::SampleMethod::Categorical => sample_categorical,
+            config::SampleMethod::GumbelSoftmax => sample_softmax,
+        };
+        (cfg.ind_var, process_func(&cfg, sampler))
+    });
 
-    let results: Vec<_> = (0..cfg.n_trials).into_par_iter().map(|i| {
-    // let results: Vec<_> = (0..N_TRIALS).map(|i| {
-        let x = cfg.beta_exp_min + (cfg.beta_exp_max - cfg.beta_exp_min) * (i as f64) / (cfg.n_trials as f64);
-        let beta = (10.0_f64).powf(x);
-        let beta_int = beta as u32;
-        (beta, process_func(&cfg, sampler, beta_int))
-    }).collect();
-    results.iter().for_each(|(x, y)| {
+
+    results.collect::<Vec<_>>().iter().for_each(|(x, y)| {
         println!("{},{}", x, y);
     });
 }
