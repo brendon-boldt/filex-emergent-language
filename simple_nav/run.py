@@ -23,7 +23,6 @@ from . import experiment_configs
 
 _cfg = experiment_configs.default_config
 
-
 def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     # Ignore warnings about non-matching batch size
     if cfg.cfg_name == "buffer_size":
@@ -226,7 +225,7 @@ def aggregate_results(
     paths = [
         x
         for p in path_strs
-        for x in expand_paths(Path("log") / p, progression, target_ts)
+        for x in expand_paths(p, progression, target_ts)
     ]
     jobs = [delayed(collect_metrics)(p, out_dir, _cfg.eval_episodes) for p in paths]
     results = [

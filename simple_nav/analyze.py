@@ -90,6 +90,7 @@ def make_snowflake_plots(
                 )
         name = "lexmap_" + "_".join(str(v).replace(".", ",") for v in vals)
         plt.savefig(path / f"{name}.pdf", format="pdf")
+        plt.savefig(path / f"{name}.png", format="png")
         plt.close()
 
 
@@ -113,6 +114,7 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         fig = plt.figure(figsize=(2, 1.5))
         ax = fig.add_axes([0, 0, 1, 1])
         ax.scatter(group[ind_var], group[dep_var], s=2.0)
+
         ticks: List[Union[int, float]]
         if dep_var == "entropy":
             ax.set_ylabel("Entropy (bits)")
@@ -131,6 +133,7 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         ax.set_xlim(df[ind_var].min() - 0.1, df[ind_var].max() + 0.1)
         fn = f"{ind_var}-{dep_var}-{name}".replace(".", ",")
         plt.savefig(cfg["path"] / f"{fn}.pdf", bbox_inches="tight", format="pdf")
+        plt.savefig(cfg["path"] / f"{fn}.png", bbox_inches="tight", format="png")
         plt.close()
 
     if "groups" in cfg:

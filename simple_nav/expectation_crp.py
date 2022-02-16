@@ -64,7 +64,19 @@ def main(args) -> None:
 
     fig = plt.figure(figsize=(2, 1.5))
     ax = fig.add_axes([0, 0, 1, 1])
-    ax.scatter(np.log10(xs), ys, s=2.0, alpha=alpha)
+    ax2 = ax.twinx()
+
+    # window size
+    ws = 100  # on either side
+    stddevs = [
+            # ys[i-ws:i+ws].std()
+            (((ys[i-ws:i+ws-1] - ys[i-ws+1:i+ws] ) ** 2).sum() / (2*ws)) ** 0.5
+            for i in range(ws, len(ys) - ws)
+            ]
+    ax.plot(np.log10(xs[ws:-ws]), stddevs, color='Orange', alpha=0.5)
+
+    ax2.scatter(np.log10(xs), ys, s=2.0, alpha=alpha)
+
     # ticks = [1, 10, 100, 1000]
     # ax.set_xticks([np.log10(x) for x in ticks])
     # ax.set_xticklabels(ticks)

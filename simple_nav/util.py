@@ -5,7 +5,7 @@ from argparse import Namespace
 import numpy as np  # type: ignore
 import torch  # type: ignore
 import gym  # type: ignore
-from stable_baselines3 import PPO  # type: ignore
+from stable_baselines3 import PPO, A2C  # type: ignore
 
 from . import nn
 from . import env as E
@@ -96,8 +96,8 @@ def make_model(cfg: Namespace) -> Any:
         "device": "cpu",
         "gamma": cfg.gamma,
     }
-    if cfg.rl_algorithm != PPO:
-        del alg_kwargs["n_steps"]
+    if cfg.rl_algorithm == A2C:
+        del alg_kwargs["batch_size"]
     model = cfg.rl_algorithm(
         nn.BottleneckPolicy,
         env,
