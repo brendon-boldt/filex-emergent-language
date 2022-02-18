@@ -1,18 +1,13 @@
 mod config;
 
-use rand::prelude::*;
 use rand::distributions::Uniform;
+use rand::prelude::*;
 use rayon::prelude::*;
 use std::env;
 
-type Sampler = fn(& Vec<f64>, f64, &Uniform<f64>, &mut ThreadRng) -> usize;
+type Sampler = fn(&Vec<f64>, f64, &Uniform<f64>, &mut ThreadRng) -> usize;
 
-fn sample_categorical(
-    w: & Vec<f64>,
-    n: f64,
-    dist: & Uniform<f64>,
-    rng: &mut ThreadRng
-) -> usize {
+fn sample_categorical(w: &Vec<f64>, n: f64, dist: &Uniform<f64>, rng: &mut ThreadRng) -> usize {
     let mut x = n * dist.sample(rng);
     let mut i = 0;
     x -= w[i];
@@ -23,29 +18,25 @@ fn sample_categorical(
     return i;
 }
 
-fn sample_softmax(
-    w: & Vec<f64>,
-    _n: f64,
-    dist: & Uniform<f64>,
-    rng: &mut ThreadRng
-) -> usize {
+fn sample_softmax(w: &Vec<f64>, _n: f64, dist: &Uniform<f64>, rng: &mut ThreadRng) -> usize {
     let w = w.iter().map(|x| -(-dist.sample(rng).ln()).ln() + x.log2());
-    w.enumerate().reduce(|x, y| if x.1 > y.1 { x } else { y }).unwrap().0
+    w.enumerate()
+        .reduce(|x, y| if x.1 > y.1 { x } else { y })
+        .unwrap()
+        .0
 }
 
-fn get_entropy(w: & Vec<f64>) -> f64 {
+fn get_entropy(w: &Vec<f64>) -> f64 {
     let n: f64 = w.iter().sum();
     -w.iter()
         .filter(|&&x| x > 0.0)
-        .map(|x| (x / n).log2() * x / n).sum::<f64>()
+        .map(|x| (x / n).log2() * x / n)
+        .sum::<f64>()
 }
 
-// The ECRP should be in some capacity explanatory and in some capacity predictive.
-
 fn ecrp_fixed_buf(cfg: &config::Config, sample: Sampler) -> f64 {
-    // let mut weights: Vec<f64> = Vec::with_capacity(ARRAY_SIZE);
     let scaled_alpha = cfg.alpha / cfg.array_size as f64;
-    let mut weights: Vec<f64> = vec![scaled_alpha; cfg.array_size]; 
+    let mut weights: Vec<f64> = vec![scaled_alpha; cfg.array_size];
     let mut addend_idxs: Vec<usize> = Vec::with_capacity(cfg.beta);
     addend_idxs.resize(cfg.beta, 0);
     let mut rng = rand::thread_rng();
@@ -55,7 +46,9 @@ fn ecrp_fixed_buf(cfg: &config::Config, sample: Sampler) -> f64 {
             let idx = sample(&weights, (iter as f64) + cfg.alpha, &dist, &mut rng);
             addend_idxs[b as usize] = idx;
         }
-        addend_idxs.iter().for_each(|idx| weights[*idx] += 1.0 / (cfg.beta as f64));
+        addend_idxs
+            .iter()
+            .for_each(|idx| weights[*idx] += 1.0 / (cfg.beta as f64));
     }
     get_entropy(&weights)
 }
@@ -81,7 +74,9 @@ fn ecrp(cfg: &config::Config, sample: Sampler) -> f64 {
             addend_idxs[b as usize] = idx;
         }
         weights[weights_len - 1] -= cfg.alpha;
-        addend_idxs.iter().for_each(|idx| weights[*idx] += 1.0 / (cfg.beta as f64));
+        addend_idxs
+            .iter()
+            .for_each(|idx| weights[*idx] += 1.0 / (cfg.beta as f64));
     }
     get_entropy(&weights)
 }
@@ -101,7 +96,7 @@ fn main() {
     let results = configs.into_par_iter().map(|cfg| {
         let process_func = match cfg.process {
             config::Process::Fixed => ecrp_fixed_buf,
-            config::Process::Base=> ecrp,
+            config::Process::Base => ecrp,
         };
         let sampler = match cfg.sample_method {
             config::SampleMethod::Categorical => sample_categorical,
@@ -109,7 +104,6 @@ fn main() {
         };
         (cfg.ind_var, process_func(&cfg, sampler))
     });
-
 
     results.collect::<Vec<_>>().iter().for_each(|(x, y)| {
         println!("{},{}", x, y);
