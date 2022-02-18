@@ -1,9 +1,12 @@
+from typing import Callable
+
 import numpy as np
 from matplotlib import pyplot as plt  # type: ignore
 import matplotlib
 from tqdm import tqdm  # type: ignore
 from joblib import Parallel, delayed  # type: ignore
 import argparse
+from scipy.stats import kendalltau  # type: ignore
 
 from .experiment_configs import log_range
 
@@ -38,7 +41,7 @@ def main(args) -> None:
 
     if args.data_path is None:
         global max_size, n, eye
-        max_size = 2 ** 12
+        max_size = 2**12
         eye = np.eye(max_size)
         n = 10_000
         params = {
@@ -64,31 +67,49 @@ def main(args) -> None:
 
     fig = plt.figure(figsize=(2, 1.5))
     ax = fig.add_axes([0, 0, 1, 1])
-    ax2 = ax.twinx()
+    # ax2 = ax.twinx()
 
-    # window size
-    ws = 100  # on either side
-    stddevs = [
-            # ys[i-ws:i+ws].std()
-            (((ys[i-ws:i+ws-1] - ys[i-ws+1:i+ws] ) ** 2).sum() / (2*ws)) ** 0.5
-            for i in range(ws, len(ys) - ws)
-            ]
-    ax.plot(np.log10(xs[ws:-ws]), stddevs, color='Orange', alpha=0.5)
+    ax.set_ylim(-0.5, 6.5)
 
-    ax2.scatter(np.log10(xs), ys, s=2.0, alpha=alpha)
-
-    # ticks = [1, 10, 100, 1000]
-    # ax.set_xticks([np.log10(x) for x in ticks])
-    # ax.set_xticklabels(ticks)
-    ax.set_xlabel(r"$\beta$")
     ax.set_ylabel("Entropy (bits)")
+    ax.scatter(np.log10(xs), ys, s=2.0, alpha=alpha, color="Orange")
 
-    fig.savefig("results/ecrp.png", bbox_inches="tight", format="png", dpi=600)
+    func: Callable
+    if args.config_name == "alpha":
+        ticks = [0.01, 1, 100]
+    elif args.config_name == "beta":
+        ticks = [1, 10, 100, 1000]
+    elif args.config_name == "n_iters":
+        ticks = [1, 10, 100, 1000]
+    elif args.config_name == "n_params":
+        ticks = [0x8, 0x20, 0x80]
+    else:
+        raise ValueError(f"Config name {args.config_name} not found")
+
+    ax.set_xticks([np.log10(x) for x in ticks])
+    ax.set_xticklabels(ticks)
+
+    fig.savefig(
+        f"results/model-{args.config_name}.png",
+        bbox_inches="tight",
+        format="png",
+        dpi=600,
+    )
+    fig.savefig(
+        f"results/model-{args.config_name}.pdf",
+        bbox_inches="tight",
+        format="pdf",
+        dpi=600,
+    )
+
+    result = kendalltau(xs, ys)
+    print(f"correlation: {result.correlation:.2f}\t" f"p-value: {result.pvalue:.2f}\t")
 
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("data_path", type=str, nargs="?")
+    parser.add_argument("config_name", type=str)
+    parser.add_argument("data_path", type=str)
     parser.add_argument("-j", type=int, default=1)
     return parser.parse_args()
 
