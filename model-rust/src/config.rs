@@ -1,37 +1,47 @@
+//! # Config
+//!
+//! `config` contains config-generating functions.  Having the functions in rust code can makes the
+//! configuration process more flexible, although any changes will have to be compiled into the
+//! binary.
+
 use std::iter::Iterator;
 
+/// Variants of the Chinese restaurant process we should use.
 #[derive(Clone)]
 pub enum Process {
+    /// The vanilla CRP which has an infinite number of weights.
     Base,
+    /// The default; a process with a fixed number of weights.
     Fixed,
-}
-
-#[allow(dead_code)]
-#[derive(Clone)]
-pub enum SampleMethod {
-    Categorical,
-    GumbelSoftmax,
 }
 
 #[derive(Clone)]
 pub struct Config {
+    /// The concentration parameter.
     pub alpha: f64,
+    /// How many total iterations to the run the process.
     pub n_iters: usize,
+    /// The size of the weights buffer.
     pub array_size: usize,
+    /// The number of sample per update (i.e., the inner loop).
     pub beta: usize,
-    pub sample_method: SampleMethod,
     pub process: Process,
+    /// The independent variable which will be outputted for plotting purposes.
     pub ind_var: f64,
 }
 
+/// Generate a range that is uniform in log space.
 fn log_range(lo: f64, hi: f64, n: i64) -> Box<dyn Iterator<Item = f64>> {
     let e_lo = lo.log2();
     let e_hi = hi.log2();
+    // Divide by `n - 1` so the range is inclusive of the upper bound.
     Box::new(
-        (0..(n + 1)).map(move |i| (2.0 as f64).powf(e_lo + (i as f64) * (e_hi - e_lo) / n as f64)),
+        (0..n)
+            .map(move |i| (2.0 as f64).powf(e_lo + (i as f64) * (e_hi - e_lo) / ((n - 1) as f64))),
     )
 }
 
+/// Retrieve a vector configurations based on the given string.
 pub fn get_configs(name: String) -> Vec<Config> {
     match name.as_str() {
         "beta_infinite" => beta_infinite(),
@@ -47,11 +57,10 @@ pub fn get_configs(name: String) -> Vec<Config> {
 fn beta() -> Vec<Config> {
     log_range(1e0, 1e3, 1000)
         .map(|beta| Config {
-            alpha: 1e-1,
+            alpha: 1e-3,
             n_iters: 1e4 as usize,
             array_size: 0x40,
             beta: beta as usize,
-            sample_method: SampleMethod::Categorical,
             process: Process::Fixed,
             ind_var: beta,
         })
@@ -65,9 +74,8 @@ fn alpha() -> Vec<Config> {
             n_iters: 1_000,
             array_size: 0x40,
             beta: 10,
-            sample_method: SampleMethod::Categorical,
             process: Process::Fixed,
-            // alpha correlates inverseley with learning rate
+            // alpha correlates inversely with learning rate
             ind_var: 1.0 / x,
         })
         .collect()
@@ -80,7 +88,6 @@ fn n_iters() -> Vec<Config> {
             n_iters: x as usize,
             array_size: 0x40,
             beta: 5,
-            sample_method: SampleMethod::Categorical,
             process: Process::Fixed,
             ind_var: x,
         })
@@ -94,7 +101,6 @@ fn n_params() -> Vec<Config> {
             n_iters: 10_00,
             array_size: x as usize,
             beta: 10,
-            sample_method: SampleMethod::Categorical,
             process: Process::Fixed,
             ind_var: x,
         })
@@ -108,7 +114,6 @@ fn beta_infinite() -> Vec<Config> {
             n_iters: 1e6 as usize,
             array_size: 0x1000,
             beta: beta as usize,
-            sample_method: SampleMethod::Categorical,
             process: Process::Base,
             ind_var: beta,
         })
@@ -122,7 +127,6 @@ fn alpha_infinite() -> Vec<Config> {
             n_iters: 10_000,
             array_size: 0x1000,
             beta: 100,
-            sample_method: SampleMethod::Categorical,
             process: Process::Base,
             ind_var: x,
         })
