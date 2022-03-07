@@ -4,7 +4,7 @@ from typing import Any, List, Tuple, Dict, Union, Iterator, Optional, Callable
 from itertools import product
 import math
 
-from scipy.stats import linregress  # type: ignore
+from scipy.stats import linregress, kendalltau  # type: ignore
 from matplotlib import pyplot as plt  # type: ignore
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -78,7 +78,7 @@ def make_snowflake_plots(
                 continue
             uses = np.array(eval(row.usages))
             for vector, use in zip(vectors, uses):
-                norm = (vector ** 2).sum() ** 0.5
+                norm = (vector**2).sum() ** 0.5
                 vector /= max(norm, 1.0)
                 axis.plot(
                     [0, vector[0]],
@@ -101,35 +101,49 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
     print(f"{ind_var} vs. {dep_var}")
 
     def do_group(group: pd.DataFrame, name: str) -> None:
-        result = linregress(group[ind_var], group[dep_var])
         print(f"Group: {name}")
-        # TODO Make a LaTeX and normal version
-        print(
-            f"slope: {result.slope:.2f}\t"
-            f"intercept: {result.intercept:.2f}\t"
-            f"rvalue: {result.rvalue:.2f}"
-        )
+
+        kendall = True
+        if kendall:
+            result = kendalltau(group[ind_var], group[dep_var])
+            print(
+                f"correlation: {result.correlation:.2f}\t"
+                f"p-value: {result.pvalue:.2f}\t"
+            )
+        else:
+            result = linregress(group[ind_var], group[dep_var])
+            print(
+                f"slope: {result.slope:.2f}\t"
+                f"intercept: {result.intercept:.2f}\t"
+                f"rvalue: {result.rvalue:.2f}"
+            )
         print()
 
         fig = plt.figure(figsize=(2, 1.5))
         ax = fig.add_axes([0, 0, 1, 1])
+        ax.set_ylim(-0.5, 6.5)
         ax.scatter(group[ind_var], group[dep_var], s=2.0)
 
         ticks: List[Union[int, float]]
-        if dep_var == "entropy":
-            ax.set_ylabel("Entropy (bits)")
-            max_ent = group["bottleneck_size_log"].max()
-            ax.set_ylim(1.5, max_ent + 0.1)
-        if ind_var == "n_steps_log":
-            ticks = [40, 300, 3000]
-            ax.set_xticks([np.log2(x) for x in ticks])
+        func: Callable
+        if ind_var == "total_timesteps_log":
+            ticks = [10000, 100_000, 1_000_000]
+            tick_labels = ["$10^4$", "$10^5$", "$10^6$"]
+            ax.set_xticks([np.log10(x) for x in ticks])
+            ax.set_xticklabels(tick_labels)
+        else:
+            if ind_var == "n_steps_log":
+                ticks = [10, 100, 1000, 10_000]
+                func = np.log2
+            if ind_var == "learning_rate_log":
+                ticks = [0.0001, 0.001, 0.01, 0.1]
+                func = np.log10
+            if ind_var == "bottleneck_size_log":
+                ticks = [0x8, 0x20, 0x80]
+                func = np.log2
+            ax.set_xticks([func(x) for x in ticks])
             ax.set_xticklabels(ticks)
-            ax.set_xlabel("Rollout Buffer Size")
-        if ind_var == "world_radius_log":
-            ticks = [2, 4, 8, 16, 32]
-            ax.set_xticks([np.log2(x) for x in ticks])
-            ax.set_xticklabels(ticks)
-            ax.set_xlabel("World Radius")
+
         ax.set_xlim(df[ind_var].min() - 0.1, df[ind_var].max() + 0.1)
         fn = f"{ind_var}-{dep_var}-{name}".replace(".", ",")
         plt.savefig(cfg["path"] / f"{fn}.pdf", bbox_inches="tight", format="pdf")

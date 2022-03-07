@@ -13,7 +13,6 @@ loop.
 """
 from typing import Dict, Iterator
 import argparse
-from math import pi
 import warnings
 
 from stable_baselines3 import PPO  # type: ignore
@@ -24,8 +23,8 @@ default_config = argparse.Namespace(
     environment=env.NavToCenter,
     bottleneck_temperature=1.5,
     bottleneck_hard=False,
-    pre_bottleneck_arch=[2 ** 5, 2 ** 6],
-    post_bottleneck_arch=[2 ** 5],
+    pre_bottleneck_arch=[2**5, 2**6],
+    post_bottleneck_arch=[2**5],
     policy_activation="tanh",
     eval_freq=5_000,
     total_timesteps=50_000,
@@ -46,32 +45,32 @@ default_config = argparse.Namespace(
     biased_reward_shaping=False,
 )
 
+
 def log_range(low: float, high: float, steps: int) -> Iterator[float]:
     for i in range(steps):
         yield low * (high / low) ** (i / (steps - 1))
 
 
 def quick_test() -> Iterator[Dict]:
-    raise NotImplementedError()
     base = {
         "total_timesteps": 40_000,
     }
     for x in log_range(1e-4, 0.1, 4):
         yield {
-            "sparsity": x,
+            "learning_rate": x,
             **base,
         }
 
 
 def learning_rate() -> Iterator[Dict]:
-     for x in log_range(1e-4, 0.1, 400):
+    for x in log_range(1e-4, 0.1, 400):
         yield {
             "learning_rate": x,
         }
 
 
 def buffer_size() -> Iterator[Dict]:
-    for x in log_range(2 ** 5, 2 ** 13, 400):
+    for x in log_range(2**3, 2**15, 600):
         # Avoid an issue with PPO
         if int(x) % default_config.batch_size == 1:
             x += 1
@@ -81,15 +80,17 @@ def buffer_size() -> Iterator[Dict]:
             "note": x,
         }
 
+
 def lexicon_size() -> Iterator[Dict]:
-    for x in log_range(2 ** 8, 2 ** 3, 400):
+    for x in log_range(2**8, 2**3, 400):
         yield {
             "pre_bottleneck_arch": [0x20, int(x)],
             "note": x,
         }
 
+
 def train_steps() -> Iterator[Dict]:
-    for x in log_range(500_000, 10_000, 200):
+    for x in log_range(1_000_000, 100, 400):
         yield {
             "total_timesteps": int(x),
         }

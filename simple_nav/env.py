@@ -13,7 +13,7 @@ GOLDEN_ANGLE = 2 * np.pi * (2 - GOLDEN_RATIO)
 
 
 def get_norm(x):
-    return np.sqrt((x ** 2).sum(-1))
+    return np.sqrt((x**2).sum(-1))
 
 
 def cosine_similarity(x, y) -> float:
@@ -143,7 +143,7 @@ class NavToCenter(Navigation):
         # Pulled from http://extremelearning.com.au/how-to-generate-uniformly-random-points-on-n-spheres-and-n-balls/
         n_dim = 2
         u = rng.normal(0, 1, n_dim)
-        norm = (u ** 2).sum() ** 0.5
+        norm = (u**2).sum() ** 0.5
         radius = np.sqrt(rng.uniform((self.goal_radius / self.world_scale) ** 2, 1.0))
         self.location = radius * u / norm
         self.prev_location = self.location.copy()
@@ -151,8 +151,8 @@ class NavToCenter(Navigation):
     def fib_disc_init(self, i: int, n: int) -> np.ndarray:
         theta = i * GOLDEN_ANGLE
         g_rad = self.goal_radius / self.world_radius
-        lo = int(np.ceil(n * g_rad ** 2))
-        hi = int(np.ceil(n / (1 - g_rad ** 2)))
+        lo = int(np.ceil(n * g_rad**2))
+        hi = int(np.ceil(n / (1 - g_rad**2)))
         r = np.sqrt((i + lo) / hi)
         if self._at_goal():
             raise ValueError(f"Index i={i} initializes agent within the goal.")
@@ -181,7 +181,7 @@ class NavToEdges(Navigation):
         # Pulled from http://extremelearning.com.au/how-to-generate-uniformly-random-points-on-n-spheres-and-n-balls/
         n_dim = 2
         u = rng.normal(0, 1, n_dim)
-        norm = (u ** 2).sum() ** 0.5
+        norm = (u**2).sum() ** 0.5
         radius = np.sqrt(rng.uniform(0, self.world_radius / self.world_scale))
         self.location = radius * u / norm
         self.prev_location = self.location.copy()

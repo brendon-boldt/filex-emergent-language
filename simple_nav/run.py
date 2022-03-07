@@ -23,6 +23,7 @@ from . import experiment_configs
 
 _cfg = experiment_configs.default_config
 
+
 def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     # Ignore warnings about non-matching batch size
     if cfg.cfg_name == "buffer_size":
@@ -222,11 +223,7 @@ def aggregate_results(
     out_dir = Path("results") / Path(path_strs[0]).name
     if not out_dir.exists():
         out_dir.mkdir(parents=True)
-    paths = [
-        x
-        for p in path_strs
-        for x in expand_paths(p, progression, target_ts)
-    ]
+    paths = [x for p in path_strs for x in expand_paths(p, progression, target_ts)]
     jobs = [delayed(collect_metrics)(p, out_dir, _cfg.eval_episodes) for p in paths]
     results = [
         r for r in Parallel(n_jobs=n_jobs)(x for x in tqdm(jobs)) if r is not None
