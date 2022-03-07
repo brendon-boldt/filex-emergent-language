@@ -25,7 +25,8 @@ def iter_groups(
         if not len(filtered):
             continue
         if plot_shape is not None:
-            if random_idxs := True:
+            random_idxs = True
+            if random_idxs:
                 random_idxs = np.random.default_rng().choice(
                     len(filtered),
                     min(len(filtered), np.prod(plot_shape)),

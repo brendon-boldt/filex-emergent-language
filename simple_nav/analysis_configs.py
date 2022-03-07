@@ -5,7 +5,7 @@ configs: Dict[str, Dict[str, Any]] = {
     "quick_test": {
         "path": "results/quick_test",
         "type": "correlation",
-        "ind_var": "sparsity_log",
+        "ind_var": "learning_rate_log",
         "dep_var": "entropy",
     },
     "learning_rate": {
