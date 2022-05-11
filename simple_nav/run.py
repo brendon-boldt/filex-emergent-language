@@ -76,7 +76,7 @@ def run_experiments(
 ) -> None:
     jobs: List[Tuple] = []
     out_path = out_dir / exp_name
-    for config in getattr(experiment_configs, exp_name)():
+    for config in experiment_configs.CONFIGS[exp_name]:
         final_config = {**vars(_cfg), **config}
         cfg = Namespace(**final_config)
         cfg.cfg_name = exp_name
