@@ -17,7 +17,7 @@ from tqdm import tqdm  # type: ignore
 import pandas as pd  # type: ignore
 
 from . import env
-from .callback import LoggingCallback
+from .callback import EvalCallback, GradCallback
 from . import util
 from . import experiment_configs
 
@@ -26,7 +26,7 @@ _cfg = experiment_configs.default_config
 
 def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
     # Ignore warnings about non-matching batch size
-    if cfg.cfg_name == "buffer_size":
+    if "buffer_size" in cfg.cfg_name:
         warnings.filterwarnings("ignore", module="stable_baselines3")
 
     log_dir = base_dir / f"run-{idx}"
@@ -41,19 +41,22 @@ def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         pkl.dump(cfg, binary_fo)
     env_kwargs = util.make_env_kwargs(cfg)
     env_eval = DummyVecEnv([lambda: cfg.environment(is_eval=True, **env_kwargs)])
-    logging_callback = LoggingCallback(
+    logging_callback = EvalCallback(
         eval_env=env_eval,
         n_eval_episodes=cfg.eval_episodes_logging,
         eval_freq=cfg.eval_freq,
         writer=writer,
         cfg=cfg,
     )
+    grad_cb = GradCallback(
+        writer=writer,
+    )
     model = util.make_model(cfg)
     if model is None:
         raise ValueError("Could not restore model.")
     model.learn(
         total_timesteps=cfg.total_timesteps,
-        callback=[logging_callback],
+        callback=[logging_callback, grad_cb],
     )
     # Create empty file to show the run is completed in case it gets interrupted
     # halfway through.
@@ -124,7 +127,7 @@ def collect_metrics(
     with (model_path.parent / "config.pkl").open("rb") as fo:
         cfg = pkl.load(fo)
     # Ignore warnings about non-matching batch size
-    if cfg.cfg_name == "buffer_size":
+    if "buffer_size" in cfg.cfg_name:
         warnings.filterwarnings("ignore", module="stable_baselines3")
     cfg = patch_old_configs(cfg)
     env_kwargs: Dict[str, Any] = {
@@ -133,7 +136,7 @@ def collect_metrics(
     }
     if cfg.environment == env.NavToCenter:
         env_kwargs["world_radius"] = _cfg.eval_world_radius
-    environment = cfg.environment(**env_kwargs)
+    environment = DummyVecEnv([lambda: cfg.environment(**env_kwargs)])
     model = util.make_model(cfg)
     if model is None:
         print(f'Could not restore model "{cfg.init_model_path}"')
@@ -158,7 +161,8 @@ def collect_metrics(
     for i in range(eval_episodes):
         n_episodes += 1
         environment.reset()
-        environment.fib_disc_init(i, eval_episodes)
+        if isinstance(environment, env.Navigation):
+            environment.fib_disc_init(i, eval_episodes)
         results = util.eval_episode(policy, mlp_extractor, environment, discretize)
         successes += results["total_reward"]
         steps_values.append(results["steps"])

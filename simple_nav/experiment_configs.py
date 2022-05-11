@@ -16,8 +16,10 @@ import argparse
 import warnings
 
 from stable_baselines3 import PPO  # type: ignore
+import gym  # type: ignore
 
 from . import env
+from .util import log_range
 
 default_config = argparse.Namespace(
     environment=env.NavToCenter,
@@ -43,13 +45,9 @@ default_config = argparse.Namespace(
     gamma=0.9,
     sparsity=1,
     biased_reward_shaping=False,
+    n_dims=None,
+    n_opts=None,
 )
-
-
-def log_range(low: float, high: float, steps: int) -> Iterator[float]:
-    for i in range(steps):
-        yield low * (high / low) ** (i / (steps - 1))
-
 
 def quick_test() -> Iterator[Dict]:
     base = {
@@ -68,6 +66,21 @@ def learning_rate() -> Iterator[Dict]:
             "learning_rate": x,
         }
 
+def buffer_size_nd() -> Iterator[Dict]:
+    base = {
+        "environment": env.NoDynamics,
+    }
+    for x in log_range(2**0, 2**15, 100):
+        # Avoid an issue with PPO
+        if int(x) % default_config.batch_size == 1:
+            x += 1
+        yield {
+            "n_steps": int(x),
+            # Prevent name collisions due to int(x)
+            "note": x,
+            **base,
+        }
+
 
 def buffer_size() -> Iterator[Dict]:
     for x in log_range(2**3, 2**15, 600):
@@ -78,6 +91,19 @@ def buffer_size() -> Iterator[Dict]:
             "n_steps": int(x),
             # Prevent name collisions due to int(x)
             "note": x,
+        }
+
+
+def buffer_size_test() -> Iterator[Dict]:
+    for x in log_range(2**3, 2**15, 20):
+        # Avoid an issue with PPO
+        if int(x) % default_config.batch_size == 1:
+            x += 1
+        yield {
+            "n_steps": int(x),
+            # Prevent name collisions due to int(x)
+            "note": x,
+            "eval_freq": 100,
         }
 
 
@@ -97,7 +123,161 @@ def train_steps() -> Iterator[Dict]:
 
 
 def temperature() -> Iterator[Dict]:
-    for x in log_range(0.5, 2, 400):
+    for x in log_range(0.1, 10, 100):
         yield {
             "bottleneck_temperature": x,
+        }
+
+
+def rc_learning_rate() -> Iterator[Dict]:
+    base = {
+            "environment": env.Reconstruction,
+            "n_dims": 1,
+            "total_timesteps": 200_000,
+            }
+    for x in log_range(1e-6, 1e-1, 200):
+        yield {
+            "learning_rate": x,
+            **base,
+        }
+
+def rc_time_steps() -> Iterator[Dict]:
+    base = {
+            "environment": env.Reconstruction,
+            "n_dims": 1,
+            # "total_timesteps": 200_000,
+            }
+    # for x in log_range(1e2, 1e7, 200):
+    for x in log_range(1e2, 1e6, 100):
+        ef = min(default_config.eval_freq, x // 5)
+        yield {
+            "total_timesteps": x,
+            "eval_freq": ef,
+            **base,
+        }
+
+def rc_buffer_size() -> Iterator[Dict]:
+    base = {
+            "environment": env.Reconstruction,
+            "n_dims": 1,
+            # "total_timesteps": 100_000 // 0x100,
+            }
+    # Keep the number of gradient steps constant
+    timesteps_base = 100_000 // 0x100
+    # for x in log_range(2**3, 2**15, 600):
+    for x in log_range(2**3, 2**10, 200):
+        # Avoid an issue with PPO
+        if int(x) % default_config.batch_size == 1:
+            x += 1
+        timesteps = int(x) * timesteps_base
+        eval_freq = min(default_config.eval_freq, timesteps // 5)
+        yield {
+            "n_steps": int(x),
+            "total_timesteps": timesteps,
+            "eval_freq":  eval_freq,
+            # Prevent name collisions due to int(x)
+            "note": x,
+            **base,
+        }
+
+def rc_lexicon_size() -> Iterator[Dict]:
+    base = {
+            "environment": env.Reconstruction,
+            "n_dims": 1,
+            "total_timesteps": 200_000,
+            }
+    for x in log_range(2**8, 2**3, 400):
+        yield {
+            "pre_bottleneck_arch": [0x20, int(x)],
+            "note": x,
+            **base,
+        }
+
+def rc_temperature() -> Iterator[Dict]:
+    base = {
+            "environment": env.Reconstruction,
+            "n_dims": 1,
+            "total_timesteps": 200_000,
+            }
+    for x in log_range(0.1, 10, 100):
+        yield {
+            "bottleneck_temperature": x,
+            **base,
+        }
+
+def scratch() -> Iterator[Dict]:
+    base = {
+            "environment": env.Signal,
+            "n_dims": 5,
+            "n_opts": 2,
+            "eval_freq": 0x100,
+            "total_timesteps": 200_000,
+            }
+    for x in range(20):
+        yield {
+            "note": x,
+            **base,
+        }
+
+sg_base_cfg = {
+            "environment": env.Signal,
+            "n_dims": 5,
+            "n_opts": 2,
+            "total_timesteps": 200_000,
+            }
+
+def sg_learning_rate() -> Iterator[Dict]:
+    base = sg_base_cfg
+    for x in log_range(1e-6, 1e-1, 100):
+        yield {
+            "learning_rate": x,
+            **base,
+        }
+
+def sg_temperature() -> Iterator[Dict]:
+    base = sg_base_cfg
+    for x in log_range(0.1, 10, 100):
+        yield {
+            **base,
+            "bottleneck_temperature": x,
+        }
+
+def sg_time_steps() -> Iterator[Dict]:
+    base = sg_base_cfg
+    # for x in log_range(1e2, 1e7, 200):
+    for x in log_range(1e2, 1e6, 100):
+        ef = min(default_config.eval_freq, x // 5)
+        yield {
+            **base,
+            "total_timesteps": x,
+            "eval_freq": ef,
+        }
+
+
+def sg_buffer_size() -> Iterator[Dict]:
+    base = sg_base_cfg
+    timesteps_base = 100_000 // 0x100
+    # for x in log_range(2**3, 2**15, 600):
+    for x in log_range(2**3, 2**10, 100):
+        # Avoid an issue with PPO
+        if int(x) % default_config.batch_size == 1:
+            x += 1
+        timesteps = int(x) * timesteps_base
+        eval_freq = min(default_config.eval_freq, timesteps // 5)
+        yield {
+            **base,
+            "n_steps": int(x),
+            "total_timesteps": timesteps,
+            "eval_freq":  eval_freq,
+            # Prevent name collisions due to int(x)
+            "note": x,
+        }
+
+def sg_lexicon_size() -> Iterator[Dict]:
+    base = sg_base_cfg
+    for x in log_range(2**8, 2**3, 100):
+        yield {
+            **base,
+            "pre_bottleneck_arch": [0x20, int(x)],
+            "note": x,
         }

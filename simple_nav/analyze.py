@@ -83,30 +83,44 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
 
         fig = plt.figure(figsize=(2, 1.5))
         ax = fig.add_axes([0, 0, 1, 1])
-        ax.set_ylim(-0.5, 6.5)
-        ax.scatter(group[ind_var], group[dep_var], s=2.0)
+        if dep_var == "entropy":
+            ax.set_ylim(-0.5, 6.5)
+        elif dep_var == "steps":
+            ax.set_ylim(5.5, 13)
+            pass
 
-        ticks: List[Union[int, float]]
-        func: Callable
-        if ind_var == "total_timesteps_log":
-            ticks = [10000, 100_000, 1_000_000]
-            tick_labels = ["$10^4$", "$10^5$", "$10^6$"]
-            ax.set_xticks([np.log10(x) for x in ticks])
-            ax.set_xticklabels(tick_labels)
-        else:
-            if ind_var == "n_steps_log":
-                ticks = [10, 100, 1000, 10_000]
-                func = np.log2
-            if ind_var == "learning_rate_log":
-                ticks = [0.0001, 0.001, 0.01, 0.1]
-                func = np.log10
-            if ind_var == "bottleneck_size_log":
-                ticks = [0x8, 0x20, 0x80]
-                func = np.log2
-            ax.set_xticks([func(x) for x in ticks])
-            ax.set_xticklabels(ticks)
+        from scipy.ndimage.filters import gaussian_filter
+        group.sort_values(ind_var, inplace=True)
+        smoothed = gaussian_filter(group[dep_var], sigma=4)
+        ax.plot(group[ind_var], smoothed)
+        ax.scatter(group[ind_var], group[dep_var], s=2.0, color='gray')
 
-        ax.set_xlim(df[ind_var].min() - 0.1, df[ind_var].max() + 0.1)
+        sgn = "−" if result.correlation < 0 else "+"
+        val = abs(result.correlation)
+        ax.text(0.65, 0.9, f"τ: {sgn}{val:.2f}", transform=ax.transAxes, fontfamily="monospace")
+
+        # ticks: Optional[List[Union[int, float]]] = None
+        # func: Callable
+        # if ind_var == "total_timesteps_log":
+        #     ticks = [10000, 100_000, 1_000_000]
+        #     tick_labels = ["$10^4$", "$10^5$", "$10^6$"]
+        #     ax.set_xticks([np.log10(x) for x in ticks])
+        #     ax.set_xticklabels(tick_labels)
+        # else:
+        #     if ind_var == "n_steps_log":
+        #         ticks = [10, 100, 1000, 10_000]
+        #         func = np.log2
+        #     if ind_var == "learning_rate_log":
+        #         ticks = [0.0001, 0.001, 0.01, 0.1]
+        #         func = np.log10
+        #     if ind_var == "bottleneck_size_log":
+        #         ticks = [0x8, 0x20, 0x80]
+        #         func = np.log2
+        #     if ticks is not None:
+        #         ax.set_xticks([func(x) for x in ticks])
+        #         ax.set_xticklabels(ticks)
+
+        # ax.set_xlim(df[ind_var].min() - 0.1, df[ind_var].max() + 0.1)
         fn = f"{ind_var}-{dep_var}-{name}".replace(".", ",")
         plt.savefig(cfg["path"] / f"{fn}.pdf", bbox_inches="tight", format="pdf")
         plt.savefig(cfg["path"] / f"{fn}.png", bbox_inches="tight", format="png")
@@ -124,39 +138,76 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         do_group(df, "default")
 
 
-def make_histograms(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
-    # This function is not fully parameterized since we only generate one
-    # histogram for the paper.
+def apply_transforms(x_data: np.ndarray, transforms: List, mps: Tuple) -> np.ndarray:
+    for t, mp in zip(transforms, mps):
+        x_data = t[1](x_data, mp)
+    return x_data
+
+TRANSFORMS = {
+    "learning_rate_log": [
+            ("data + x", lambda data, x: data + x, np.linspace(-10, 0, 1000)),
+            ("data * x", lambda data, x: data * x, 10 ** log_range(1e-2, 1e0, 1000)),
+        ]
+        }
+
+def fit_metparameters(
+        ind_var: str,
+        x_real: np.ndarray,
+        y_real: np.ndarray,
+        x_model: np.ndarray,
+        y_model: np.ndarray, 
+        ) -> Tuple[Tuple, float]:
+    results: list = []
+    tfs = TRANSFORMS[ind_var]
+    
+    for mps in product(*(t[2] for t in tfs)):
+        x_model_t = apply_transforms(x_model, tfs, mps)
+        idxs = np.array([
+            np.abs(x_real[i] - x_model_t).argmin()
+            for i in range(len(x_real))
+        ])
+        error = ((y_model[idxs] - y_real) ** 2).mean()
+        # print(f"{s:+.1f} {m:+.1f}: {np.log10(error):.1f}")
+        results.append((mps, error))
+
+    results = sorted(results, key=lambda x: x[1])
+    for r in results[:20]:
+        print(f"{r[0][0]:.2f} {r[0][1]:.2f} = {r[1]:.4f}")
+    return results[0]
+    
+
+def align_data(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
+    model_data_path = cfg['model_data_path']
+    ind_var = cfg["ind_var"]
     dep_var = cfg["dep_var"]
 
     fig = plt.figure(figsize=(2, 1.5))
     ax = fig.add_axes([0, 0, 1, 1])
-    ax.set(yticklabels=[], ylabel=None, yticks=[])
-    ax.set_xlabel("Entropy (bits)")
+    ax.set_ylim(-0.5, 6.5)
 
-    smallest_group = min(sum(x) for x in df.groupby(cfg["groups"]).indices.values())
-    n_bins = 30
-    vmin = 1.8
-    vmax = 5.3
-    bins = [vmin + i * (vmax - vmin) / n_bins for i in range(n_bins)]
-    # bins = None
-    for k, v in df.groupby(cfg["groups"]).indices.items():
-        if not isinstance(k, tuple):
-            kt: Tuple = (k,)
-        else:
-            kt = k
-        ax.hist(
-            df.iloc[v][dep_var],
-            bins=bins,
-            density=True,
-            alpha=0.5,
-            label="Shaped" if df.iloc[v[0]]["sparsity"] < float("inf") else "No Shaped",
-        )
-    ax.legend(fontsize="small")
-    fn = f"histogram-{dep_var}".replace(".", ",")
+    ax.scatter(df[ind_var], df[dep_var], s=2.0)
+
+    # Get model data
+    data = np.genfromtxt(model_data_path, delimiter=",")
+    model_xs, model_ys = data.transpose()
+    if ind_var == "learning_rate_log":
+        model_xs = np.log10(model_xs)
+    model_plot_alpha = min(1, 0.02 * 10_000 / len(model_xs))
+
+    mps, error = fit_metparameters(ind_var, df[ind_var].to_numpy(), df[dep_var].to_numpy(), model_xs, model_ys)
+    tfs = TRANSFORMS[ind_var]
+    model_xs = apply_transforms(model_xs, tfs, mps)
+    print("Best transform parameters")
+    for t, mp in  zip(tfs, mps):
+        print(f"`{t[0]}` where x={mp:.2f}")
+    print(f"Error: {error:.4f}")
+
+    ax.scatter(model_xs, model_ys, s=2.0, alpha=model_plot_alpha)
+
+    fn = f"align-{ind_var}-{dep_var}".replace(".", ",")
     plt.savefig(cfg["path"] / f"{fn}.pdf", bbox_inches="tight", format="pdf")
+    plt.savefig(cfg["path"] / f"{fn}.png", bbox_inches="tight", format="png")
     plt.close()
-
 
 def preprocess_data(df: pd.DataFrame, cfg: Dict) -> None:
     if cfg.get("drop_unsuccessful", True):

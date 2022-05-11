@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter  # type: ignore
 from . import util
 
 
-class LoggingCallback(EventCallback):
+class EvalCallback(EventCallback):
     def __init__(
         self,
         eval_env: Union[gym.Env, VecEnv],
@@ -56,31 +56,42 @@ class LoggingCallback(EventCallback):
             )
 
     def _on_step(self) -> bool:
-        if not (self.eval_freq > 0 and self.n_calls % self.eval_freq == 0):
+        # if not (self.eval_freq > 0 and self.n_calls % self.eval_freq == 0):
+        if not (self.n_calls % self.eval_freq == 0):
             return True
         # Sync training and eval env if there is VecNormalize
         sync_envs_normalization(self.training_env, self.eval_env)
 
         if self.model is None or self.model.policy is None:
             raise ValueError("Model/policy is None.")
-        env = self.eval_env.envs[0]
+        # env = self.eval_env.envs[0]
+        env = self.eval_env
         results = []
         for _ in range(self.n_eval_episodes):
-            env.reset()
             ep_results = util.eval_episode(
                 self.model.policy,
                 self.model.policy.mlp_extractor,
                 env,
-                self.cfg != "none",
+                True,
             )
             results.append(ep_results)
 
         episode_rewards = [r["total_reward"] for r in results]
         episode_lengths = [r["steps"] for r in results]
         bn_activations = np.concatenate([r["bn_activations"] for r in results])
+        bn_activations_soft = np.concatenate([r["bn_activations_soft"] for r in results])
 
         entropy = util.get_entropy(bn_activations)
         self.writer.add_scalar("entropy", entropy, self.num_timesteps)
+
+        # bas_shape = bn_activations_soft.shape
+        # new_shape = (bas_shape[0] // self.cfg.n_steps, self.cfg.n_steps, bas_shape[-1])
+        # truncated_len = bas_shape[0] - (bas_shape[0] % self.cfg.n_steps)
+        # if truncated_len:
+        #     bas_grouped = bn_activations_soft[:truncated_len].reshape(new_shape)
+        #     H_updates_batched = util.xlx(bas_grouped.mean(1)).sum(-1).mean(0)
+        #     H_updates = util.xlx(bn_activations_soft.mean(0)).sum(0)
+        #     self.writer.add_scalar("H_updates_diff", H_updates - H_updates_batched, self.num_timesteps)
 
         if self.log_path is not None:
             self.evaluations_timesteps.append(self.num_timesteps)
@@ -102,4 +113,32 @@ class LoggingCallback(EventCallback):
             self.model.policy.state_dict(),
             self.log_path / f"model-{self.num_timesteps}.pt",
         )
+        return True
+
+
+class GradCallback(EventCallback):
+    def __init__(
+        self,
+        writer: SummaryWriter,
+        eval_freq: int = 10,
+    ) -> None:
+        super(self.__class__, self).__init__(None, verbose=0)
+        self.eval_freq = eval_freq
+        self.writer = writer
+
+    def _on_step(self) -> bool:
+        return True
+        if not (self.eval_freq > 0 and self.n_calls % self.eval_freq == 0):
+            return True
+
+        # self.writer.add_scalar("entropy", entropy, self.num_timesteps)
+
+        if self.model is None or self.model.policy is None:
+            raise ValueError("Model/policy is None.")
+        bn_acts = self.model.policy.mlp_extractor.bn_activations
+        # breakpoint()
+        self.model.policy.mlp_extractor.bn_activations = []
+
+        # self.writer.add_scalar("entropy", entropy, self.num_timesteps)
+
         return True

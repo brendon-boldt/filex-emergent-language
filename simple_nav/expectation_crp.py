@@ -23,6 +23,10 @@ def main(args) -> None:
     ax.set_ylim(-0.5, 6.5)
 
     ax.set_ylabel("Entropy (bits)")
+    def inv(xs):
+        xs = (xs - xs.min()) / (xs.max() - xs.min()) / 2
+        return -np.log(1/(xs+0.5)-1)
+    # ys = inv(ys)
     ax.scatter(np.log10(xs), ys, s=2.0, alpha=alpha, color="Orange")
 
     if args.config_name == "alpha":
@@ -33,11 +37,13 @@ def main(args) -> None:
         ticks = [1, 10, 100, 1000]
     elif args.config_name == "n_params":
         ticks = [0x8, 0x20, 0x80]
+    elif args.config_name == "scratch":
+        pass
     else:
         raise ValueError(f"Config name {args.config_name} not found")
 
-    ax.set_xticks([np.log10(x) for x in ticks])
-    ax.set_xticklabels(ticks)
+    # ax.set_xticks([np.log10(x) for x in ticks])
+    # ax.set_xticklabels(ticks)
 
     for fmt in ["pdf", "png"]:
         fig.savefig(

@@ -1,7 +1,8 @@
-from typing import Tuple, List, Dict, Any
+from typing import Tuple, List, Dict, Any, Iterable
 from functools import partial
 from argparse import Namespace
 
+from stable_baselines3.common.utils import obs_as_tensor
 import numpy as np  # type: ignore
 import torch  # type: ignore
 import gym  # type: ignore
@@ -27,11 +28,13 @@ def get_entropy(o: np.ndarray) -> np.ndarray:
 
 
 def eval_episode(policy, fe, env, discretize) -> Dict[str, Any]:
-    obs = env.get_observation()
+    # obs = env.get_observation()
+    obs = env.reset()
     done = False
     steps = 0
     bns = []
     logitss = []
+    bns_s = []
     original_bottlenck = policy.mlp_extractor.bottleneck
     if discretize:
         policy.mlp_extractor.bottleneck = partial(
@@ -41,21 +44,25 @@ def eval_episode(policy, fe, env, discretize) -> Dict[str, Any]:
         )
     total_reward = 0.0
     while not done:
-        obs_tensor = torch.Tensor(obs)
+        obs_tensor = obs_as_tensor(obs, 'cpu')  # type: ignore
         with torch.no_grad():
-            policy_out = policy(obs_tensor.unsqueeze(0), deterministic=True)
+            policy_out = policy(obs_tensor, deterministic=True)
             act = policy_out[0][0].numpy()
-            bn_results = fe.forward_bottleneck(obs_tensor)
+            # bn_results = fe.forward_bottleneck(obs_tensor)
+            bn_results = fe._logits, fe._bn_activations[0]
+            bna_soft = original_bottlenck(bn_results[0])
         logitss.append(bn_results[0].numpy())
         bns.append(bn_results[1].numpy())
-        obs, reward, done, info = env.step(act)
-        total_reward += reward
+        bns_s.append(bna_soft.numpy())
+        obs, reward, done, info = env.step(np.expand_dims(act, 0))
+        total_reward += reward[0]
         steps += 1
     policy.mlp_extractor.bottleneck = original_bottlenck
-    total_reward = float(info["at_goal"])
+    total_reward = float(info[0].get("success", 0))
     return {
         "steps": steps,
         "bn_activations": bns,
+        "bn_activations_soft": bns_s,
         "bn_logits": logitss,
         "total_reward": total_reward,
     }
@@ -68,6 +75,8 @@ def make_env_kwargs(cfg: Namespace) -> Dict:
         "world_radius": cfg.world_radius,
         "max_step_scale": cfg.max_step_scale,
         "biased_reward_shaping": cfg.biased_reward_shaping,
+        "n_dims": cfg.n_dims,
+        "n_opts": cfg.n_opts,
     }
 
 
@@ -79,6 +88,8 @@ def _make_policy_kwargs(cfg: Namespace) -> gym.Env:
             "post_bottleneck_arch": cfg.post_bottleneck_arch,
             "temp": cfg.bottleneck_temperature,
             "act": cfg.policy_activation,
+            "signal_game": cfg.environment == E.Signal,
+            "n_opts": cfg.n_opts,
         },
     }
 
@@ -98,8 +109,9 @@ def make_model(cfg: Namespace) -> Any:
     }
     if cfg.rl_algorithm == A2C:
         del alg_kwargs["batch_size"]
+    policy = nn.MultiInputBottleneckPolicy if cfg.environment == E.Signal else nn.BottleneckPolicy
     model = cfg.rl_algorithm(
-        nn.BottleneckPolicy,
+        policy,
         env,
         **alg_kwargs,
     )
@@ -109,3 +121,8 @@ def make_model(cfg: Namespace) -> Any:
         except Exception:
             return None
     return model
+
+def log_range(low: float, high: float, steps: int) -> np.ndarray:
+    return np.exp(np.linspace(np.log(low), np.log(high), steps))
+    # for i in range(steps):
+    #     yield low * (high / low) ** (i / (steps - 1))
