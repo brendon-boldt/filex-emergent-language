@@ -50,14 +50,29 @@ pub fn get_configs(name: String) -> Vec<Config> {
         "alpha_infinite" => alpha_infinite(),
         "n_iters" => n_iters(),
         "n_params" => n_params(),
+        "scratch" => scratch(),
         _ => panic!("Could not find config gen {}", name),
     }
 }
 
+fn scratch() -> Vec<Config> {
+    log_range(1.0, 1e3, 1000)
+        .map(|x| Config {
+            alpha: 1.,
+            n_iters: 2e2 as usize,
+            array_size: 0x40,
+            beta: x as usize,
+            process: Process::Fixed,
+            ind_var: x,
+        })
+        .collect()
+}
+
+
 fn beta() -> Vec<Config> {
     log_range(1e0, 1e3, 1000)
         .map(|beta| Config {
-            alpha: 1e-3,
+            alpha: 1e-1,
             n_iters: 1e4 as usize,
             array_size: 0x40,
             beta: beta as usize,

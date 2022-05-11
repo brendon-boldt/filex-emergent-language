@@ -31,6 +31,7 @@ fn process_fixed_buffer(cfg: &config::Config) -> f64 {
     let scaled_alpha = cfg.alpha / cfg.array_size as f64;
     let mut weights: Vec<f64> = vec![scaled_alpha; cfg.array_size];
     let mut addend_idxs: Vec<usize> = Vec::with_capacity(cfg.beta);
+    addend_idxs.resize(cfg.beta, 0);
     let mut rng = rand::thread_rng();
     // Since we would have to create a new distribution every time the weights are updated., it is
     // far faster to use a uniform distribution and scale it manually.
@@ -89,6 +90,7 @@ fn main() {
     let configs = config::get_configs(config_name);
 
     let results = configs.into_par_iter().map(|cfg| {
+    // let results = configs.iter().map(|cfg| {
         let process_func = match cfg.process {
             config::Process::Fixed => process_fixed_buffer,
             config::Process::Base => process_infinite_buffer,
