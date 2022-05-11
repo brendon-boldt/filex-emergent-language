@@ -52,7 +52,10 @@ class BottleneckExtractor(nn.Module):
         )
 
         post_arch = [x for x in net_arch["post_bottleneck_arch"]]
-        post_input_size = pre_arch[-1] + self.n_dims * self.n_opts
+        if self.signal_game:
+            post_input_size = pre_arch[-1] + self.n_dims * self.n_opts
+        else:
+            post_input_size = pre_arch[-1]
         post_arch.insert(0, post_input_size)
         post_layers: List[nn.Module] = []
         for i in range(len(post_arch) - 1):
@@ -91,18 +94,11 @@ class BottleneckExtractor(nn.Module):
         self._logits = pi_x.detach().cpu()
         pi_x = self.bottleneck(pi_x)
         self._bn_activations = pi_x.detach().cpu()
-        # if pi_x.requires
-        # self.bn_activations.append(pi_x.detach().numpy())
         if self.signal_game:
             pi_x = torch.cat([pi_x, torch.flatten(vecs, 1)], dim=-1)
         pi_x = self.post_net(pi_x)
         vf_x = self.vf_net(features)
         return pi_x, vf_x
-
-    # def forward_bottleneck(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-    #     logits = self.pre_net(x)
-    #     _bn_activations = self.bottleneck(logits)
-    #     return logits, _bn_activations
 
 
 # This method may need to be modified if Stable Baselines is updated
