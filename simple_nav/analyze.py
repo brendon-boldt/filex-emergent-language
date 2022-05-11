@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, List, Tuple, Dict, Union, Iterator, Optional, Callable
 from itertools import product
 import math
+from joblib import Parallel, delayed  # type: ignore
 
 from scipy.stats import linregress, kendalltau  # type: ignore
 from matplotlib import pyplot as plt  # type: ignore
@@ -11,6 +12,7 @@ import pandas as pd  # type: ignore
 import matplotlib
 
 from . import analysis_configs
+from .util import log_range
 
 
 def iter_groups(
@@ -52,47 +54,6 @@ def iter_groups(
         else:
             axes = None
         yield vals, filtered, axes
-
-
-def make_snowflake_plots(
-    df: pd.DataFrame,
-    cfg: Dict,
-) -> None:
-    path = cfg["path"]
-    groups = cfg["groups"]
-    plot_shape = (3, 2)
-
-    if not path.exists():
-        path.mkdir()
-    path = path / "starfish"
-    if not path.exists():
-        path.mkdir()
-
-    for vals, filtered, axes in iter_groups(df, groups, plot_shape, no_axes=False):
-        for axis, row in zip(axes.reshape(-1), filtered.itertuples()):
-            axis.axis("off")
-            axis.set_xlim(-1.1, 1.1)
-            axis.set_ylim(-1.1, 1.1)
-            try:
-                vectors = np.array(eval(row.vectors))
-            except Exception:
-                continue
-            uses = np.array(eval(row.usages))
-            for vector, use in zip(vectors, uses):
-                norm = (vector**2).sum() ** 0.5
-                vector /= max(norm, 1.0)
-                axis.plot(
-                    [0, vector[0]],
-                    [0, vector[1]],
-                    color="blue",
-                    alpha=use / max(uses),
-                    linewidth=8,
-                    solid_capstyle="round",
-                )
-        name = "lexmap_" + "_".join(str(v).replace(".", ",") for v in vals)
-        plt.savefig(path / f"{name}.pdf", format="pdf")
-        plt.savefig(path / f"{name}.png", format="png")
-        plt.close()
 
 
 def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
@@ -244,7 +205,5 @@ def main() -> None:
 
     if cfg["type"] == "correlation":
         analyze_correlation(dataframe, cfg)
-    if cfg["type"] == "snowflake":
-        make_snowflake_plots(dataframe, cfg)
-    if cfg["type"] == "histograms":
-        make_histograms(dataframe, cfg)
+    if cfg["type"] == "align":
+        align_data(dataframe, cfg)
