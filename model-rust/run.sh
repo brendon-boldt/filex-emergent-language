@@ -5,7 +5,6 @@ set -e
 mkdir -p output figures
 
 configs="alpha beta n_iters n_params"
-configs="scratch"
 
 for c in $configs; do
     echo Runing $c...

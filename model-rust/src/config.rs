@@ -55,6 +55,8 @@ pub fn get_configs(name: String) -> Vec<Config> {
     }
 }
 
+const DEFAULT_BETA: usize = 8;
+
 fn scratch() -> Vec<Config> {
     log_range(1.0, 1e3, 1000)
         .map(|x| Config {
@@ -72,7 +74,7 @@ fn scratch() -> Vec<Config> {
 fn beta() -> Vec<Config> {
     log_range(1e0, 1e3, 1000)
         .map(|beta| Config {
-            alpha: 1e-1,
+            alpha: 1.0,
             n_iters: 1e4 as usize,
             array_size: 0x40,
             beta: beta as usize,
@@ -88,7 +90,7 @@ fn alpha() -> Vec<Config> {
             alpha: x,
             n_iters: 1_000,
             array_size: 0x40,
-            beta: 10,
+            beta: DEFAULT_BETA,
             process: Process::Fixed,
             // alpha correlates inversely with learning rate
             ind_var: 1.0 / x,
@@ -97,12 +99,12 @@ fn alpha() -> Vec<Config> {
 }
 
 fn n_iters() -> Vec<Config> {
-    log_range(1e0, 1e3, 1000)
+    log_range(1e0, 1e2, 1000)
         .map(|x| Config {
             alpha: 1e0,
             n_iters: x as usize,
             array_size: 0x40,
-            beta: 5,
+            beta: DEFAULT_BETA,
             process: Process::Fixed,
             ind_var: x,
         })
@@ -112,10 +114,10 @@ fn n_iters() -> Vec<Config> {
 fn n_params() -> Vec<Config> {
     log_range(0x8 as f64, 0x100 as f64, 1000)
         .map(|x| Config {
-            alpha: 5e-3 * x.floor(),
+            alpha: 1.,
             n_iters: 10_00,
             array_size: x as usize,
-            beta: 10,
+            beta: DEFAULT_BETA,
             process: Process::Fixed,
             ind_var: x,
         })
