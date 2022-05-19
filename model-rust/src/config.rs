@@ -75,7 +75,7 @@ fn beta() -> Vec<Config> {
     log_range(1e0, 1e3, 1000)
         .map(|beta| Config {
             alpha: 1.0,
-            n_iters: 1e4 as usize,
+            n_iters: 1e3 as usize,
             array_size: 0x40,
             beta: beta as usize,
             process: Process::Fixed,
@@ -99,7 +99,7 @@ fn alpha() -> Vec<Config> {
 }
 
 fn n_iters() -> Vec<Config> {
-    log_range(1e0, 1e2, 1000)
+    log_range(1e0, 1e3, 1000)
         .map(|x| Config {
             alpha: 1e0,
             n_iters: x as usize,
