@@ -12,14 +12,8 @@ from . import nn
 from . import env as E
 
 
-def _xlx(x: float) -> float:
-    if x == 0.0:
-        return 0.0
-    else:
-        return -x * np.log2(x)
-
-
-xlx = np.vectorize(_xlx)
+def xlx(x: np.ndarray) -> np.ndarray:
+    return -x * np.log2(x + 1e-20)
 
 
 def get_entropy(o: np.ndarray) -> np.ndarray:
