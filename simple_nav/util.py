@@ -22,7 +22,6 @@ def get_entropy(o: np.ndarray) -> np.ndarray:
 
 
 def eval_episode(policy, fe, env, discretize) -> Dict[str, Any]:
-    # obs = env.get_observation()
     obs = env.reset()
     done = False
     steps = 0
@@ -42,7 +41,6 @@ def eval_episode(policy, fe, env, discretize) -> Dict[str, Any]:
         with torch.no_grad():
             policy_out = policy(obs_tensor, deterministic=True)
             act = policy_out[0][0].numpy()
-            # bn_results = fe.forward_bottleneck(obs_tensor)
             bn_results = fe._logits, fe._bn_activations[0]
             bna_soft = original_bottlenck(bn_results[0])
         logitss.append(bn_results[0].numpy())
@@ -118,5 +116,3 @@ def make_model(cfg: Namespace) -> Any:
 
 def log_range(low: float, high: float, steps: int) -> np.ndarray:
     return np.exp(np.linspace(np.log(low), np.log(high), steps))
-    # for i in range(steps):
-    #     yield low * (high / low) ** (i / (steps - 1))

@@ -1,16 +1,3 @@
-"""
-Configurations for experiments
-
-Configurations that are used in the paper are annotated with the comment PAPER
-
-Each "configuration" is a function which generates an iterator of dictionaries.
-Each dictionary should contain the hyperparameters that are different from the
-default.  Note that if any yielded dictionary is exactly the same to another
-one in the experiment, They will overwrite each other. This can be avoided by
-adding a dummy parameter like `{"note": i}` for each iteration of the config
-loop.
-
-"""
 from typing import Dict, Iterable, Mapping, Any, Callable
 import argparse
 import warnings

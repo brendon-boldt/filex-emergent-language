@@ -63,9 +63,6 @@ def main(args) -> None:
     ax.set_xticks([])
     ax.set_yticks([])
 
-    # ax.set_xticks([np.log10(x) for x in ticks])
-    # ax.set_xticklabels(ticks)
-
     for fmt in ["pdf", "png"]:
         fig.savefig(
             f"results/model-{args.config_name}.{fmt}",

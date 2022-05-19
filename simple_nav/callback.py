@@ -84,15 +84,6 @@ class EvalCallback(EventCallback):
         entropy = util.get_entropy(bn_activations)
         self.writer.add_scalar("entropy", entropy, self.num_timesteps)
 
-        # bas_shape = bn_activations_soft.shape
-        # new_shape = (bas_shape[0] // self.cfg.n_steps, self.cfg.n_steps, bas_shape[-1])
-        # truncated_len = bas_shape[0] - (bas_shape[0] % self.cfg.n_steps)
-        # if truncated_len:
-        #     bas_grouped = bn_activations_soft[:truncated_len].reshape(new_shape)
-        #     H_updates_batched = util.xlx(bas_grouped.mean(1)).sum(-1).mean(0)
-        #     H_updates = util.xlx(bn_activations_soft.mean(0)).sum(0)
-        #     self.writer.add_scalar("H_updates_diff", H_updates - H_updates_batched, self.num_timesteps)
-
         if self.log_path is not None:
             self.evaluations_timesteps.append(self.num_timesteps)
             self.evaluations_results.append(sum(episode_rewards) / len(episode_rewards))

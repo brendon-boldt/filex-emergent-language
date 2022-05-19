@@ -72,14 +72,6 @@ class BottleneckExtractor(nn.Module):
 
         self.bn_activations: List[np.ndarray] = []
 
-        def backward_hook(module, grad_input, grad_output) -> None:
-            pass
-            # self.backward_log.append(grad_output[0].detach().numpy())
-            # self.backward_log.append(grad_input[0].detach().numpy())
-
-        # self.pre_net.register_full_backward_hook(backward_hook)
-        # self.post_net.register_full_backward_hook(backward_hook)
-
     def _restructure(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         correct_idxs = x[:, :self.n_opts].argmax(-1)
         vecs = x[:, self.n_opts:].reshape(x.shape[0], self.n_opts, -1)

@@ -17,7 +17,7 @@ from tqdm import tqdm  # type: ignore
 import pandas as pd  # type: ignore
 
 from . import env
-from .callback import EvalCallback, GradCallback
+from .callback import EvalCallback
 from . import util
 from . import experiment_configs
 
@@ -48,15 +48,12 @@ def execute_run(base_dir: Path, cfg: argparse.Namespace, idx: int) -> None:
         writer=writer,
         cfg=cfg,
     )
-    grad_cb = GradCallback(
-        writer=writer,
-    )
     model = util.make_model(cfg)
     if model is None:
         raise ValueError("Could not restore model.")
     model.learn(
         total_timesteps=cfg.total_timesteps,
-        callback=[logging_callback, grad_cb],
+        callback=[logging_callback],
     )
     # Create empty file to show the run is completed in case it gets interrupted
     # halfway through.
