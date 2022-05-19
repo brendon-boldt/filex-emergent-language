@@ -13,7 +13,7 @@ for c in $configs; do
     
     cd ..
     # We load the data into matplotlib to make everything look consistent
-    env/bin/python -m simple_nav.expectation_crp $c model-rust/output/$c.out
+    python -m simple_nav.expectation_crp $c model-rust/output/$c.out
     cd model-rust
 done
 

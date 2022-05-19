@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt  # type: ignore
 import argparse
 from scipy.stats import kendalltau  # type: ignore
 from scipy.ndimage import gaussian_filter  # type: ignore
+from pathlib import Path
 
 from .experiment_configs import log_range
 
@@ -63,6 +64,7 @@ def main(args) -> None:
     ax.set_xticks([])
     ax.set_yticks([])
 
+    Path("results").mkdir(exist_ok=True)
     for fmt in ["pdf", "png"]:
         fig.savefig(
             f"results/model-{args.config_name}.{fmt}",

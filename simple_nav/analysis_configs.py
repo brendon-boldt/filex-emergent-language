@@ -4,6 +4,7 @@ from typing import Dict, Any
 configs: Dict[str, Dict[str, Any]] = {
     "quick_test": {
         "ind_var": "learning_rate_log",
+        "drop_unsuccessful": False,
     },
     **{
         f"{env}_{exp}": {
