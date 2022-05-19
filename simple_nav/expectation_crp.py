@@ -21,13 +21,16 @@ def main(args) -> None:
     fig = plt.figure(figsize=(2, 1.5))
     ax = fig.add_axes([0, 0, 1, 1])
 
-    ax.set_ylim(-0.5, 7.0)
+    ax.set_ylim(-0.5, 6.5)
     # ax.set_ylabel("Entropy (bits)")
     lxs = np.log10(xs)
 
     if args.config_name != "n_params":
-        ax.plot([lxs.min(), lxs.max()], [6, 6], color="Gray", alpha=0.2, linestyle='--')
-        ax.plot([lxs.min(), lxs.max()], [0, 0], color="Gray", alpha=0.2, linestyle='--')
+        termini = [6, 6]
+    else:
+        termini = [np.log2(min(xs)), np.log2(max(xs))]
+    ax.plot([lxs.min(), lxs.max()], termini, color="Gray", alpha=0.2, linestyle='--')
+    ax.plot([lxs.min(), lxs.max()], [0, 0], color="Gray", alpha=0.2, linestyle='--')
 
     ax.scatter(lxs, ys, s=2.0, edgecolors= None, alpha=alpha, color="Gray")
     ax.plot(lxs, gaussian_filter(ys, sigma=30), color="Orange")
@@ -37,12 +40,10 @@ def main(args) -> None:
 
     sgn = "−" if result.correlation < 0 else "+"
     val = abs(result.correlation)
-    ax.text(
-        0.05,
-        0.9,
+    ax.set_title(
         f"τ: {sgn}{val:.2f}",
-        transform=ax.transAxes,
         fontfamily="monospace",
+        fontsize="x-large",
     )
 
 

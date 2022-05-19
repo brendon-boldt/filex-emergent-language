@@ -85,7 +85,7 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         fig = plt.figure(figsize=(2, 1.5))
         ax = fig.add_axes([0, 0, 1, 1])
         if dep_var == "entropy":
-            ax.set_ylim(-0.5, 7.0)
+            ax.set_ylim(-0.5, 6.5)
         elif dep_var == "steps":
             ax.set_ylim(5.5, 13)
             pass
@@ -94,33 +94,34 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         smoothed = gaussian_filter(group[dep_var], sigma=30)
 
         if ind_var != "bottleneck_size_log":
-            ax.plot(
-                [group[ind_var].min(), group[ind_var].max()],
-                [6, 6],
-                alpha=0.2,
-                linestyle="--",
-                color="gray",
-            )
-            ax.plot(
-                [group[ind_var].min(), group[ind_var].max()],
-                [0, 0],
-                alpha=0.2,
-                linestyle="--",
-                color="gray",
-            )
+            termini = [6, 6]
+        else:
+            termini = [group[ind_var].min(), group[ind_var].max()]
+        ax.plot(
+            [group[ind_var].min(), group[ind_var].max()],
+            termini,
+            alpha=0.2,
+            linestyle="--",
+            color="gray",
+        )
+        ax.plot(
+            [group[ind_var].min(), group[ind_var].max()],
+            [0, 0],
+            alpha=0.2,
+            linestyle="--",
+            color="gray",
+        )
 
         ax.plot(group[ind_var], smoothed)
-        alpha = 200 / len(group[ind_var])
+        alpha = min(1, 200 / len(group[ind_var]))
         ax.scatter(group[ind_var], group[dep_var], s=2.0, color="gray", alpha=alpha)
 
         sgn = "−" if result.correlation < 0 else "+"
         val = abs(result.correlation)
-        ax.text(
-            0.05,
-            0.9,
+        ax.set_title(
             f"τ: {sgn}{val:.2f}",
-            transform=ax.transAxes,
             fontfamily="monospace",
+            fontsize="x-large",
         )
 
         ax.set_xticks([])
