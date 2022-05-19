@@ -53,23 +53,36 @@ configs: Dict[str, Dict[str, Any]] = {
         "ind_var": "total_timesteps_log",
     },
     **{
-        name: {
-            "ind_var": var,
+        f"{env}_{exp}": {
+            "ind_var": ind_var,
             "drop_unsuccessful": False,
-        }
-        for name, var in [
-            ("rc_time_steps", "total_timesteps_log"),
-            ("rc_buffer_size", "n_steps_log"),
-            ("rc_lexicon_size", "bottleneck_size_log"),
-            ("rc_learning_rate", "learning_rate_log"),
-            ("rc_temperature", "bottleneck_temperature_log"),
-            ("sg_time_steps", "total_timesteps_log"),
-            ("sg_temperature", "bottleneck_temperature_log"),
-            ("sg_buffer_size", "n_steps_log"),
-            ("sg_lexicon_size", "bottleneck_size_log"),
-            ("sg_learning_rate", "learning_rate_log"),
-        ]
+        } for env in ["nodyn", "recon", "sig", "nav"]
+        for exp, ind_var in [
+            ("timesteps", "total_timesteps_log"),
+            ("temperature", "bottleneck_temperature_log"),
+            ("lexicon_size", "bottleneck_size_log"),
+            ("learning_rate", "learning_rate_log"),
+            ("buffer_size", "n_steps_log"),
+            ]
     },
+    # **{
+    #     name: {
+    #         "ind_var": var,
+    #         "drop_unsuccessful": False,
+    #     }
+    #     for name, var in [
+    #         ("rc_time_steps", "total_timesteps_log"),
+    #         ("rc_buffer_size", "n_steps_log"),
+    #         ("rc_lexicon_size", "bottleneck_size_log"),
+    #         ("rc_learning_rate", "learning_rate_log"),
+    #         ("rc_temperature", "bottleneck_temperature_log"),
+    #         ("sg_time_steps", "total_timesteps_log"),
+    #         ("sg_temperature", "bottleneck_temperature_log"),
+    #         ("sg_buffer_size", "n_steps_log"),
+    #         ("sg_lexicon_size", "bottleneck_size_log"),
+    #         ("sg_learning_rate", "learning_rate_log"),
+    #     ]
+    # },
 }
 
 for k, cfg in configs.items():

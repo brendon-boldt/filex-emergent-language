@@ -11,7 +11,7 @@ for env in nodyn recon sig nav; do
     done
 done
 
-set -xe
+set -ex
 
 # Test that the environment is set up correct with the following
 # cfgs="quick_test"
@@ -26,7 +26,5 @@ for c in $cfgs; do
     python -m simple_nav eval log/$c -j$n_threads
 done
 
-for c in $cfgs; do
-    # Analyze the eval data; output is put in results/config_name
-    python -m simple_nav analyze $c
-done
+# Analyze the eval data; output is put in results/config_name
+python -m simple_nav analyze $cfgs

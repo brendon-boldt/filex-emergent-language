@@ -33,7 +33,7 @@ default_config = argparse.Namespace(
     post_bottleneck_arch=[2**5],
     policy_activation="tanh",
     eval_freq=5_000,
-    total_timesteps=50_000,
+    total_timesteps=200_000,
     eval_episodes_logging=200,
     eval_episodes=3_000,
     rl_algorithm=PPO,
@@ -54,27 +54,23 @@ default_config = argparse.Namespace(
 )
 
 
-N_ITERS = 200
+N_ITERS = 600
 
 
 BASE_CFGS: Dict[str, Config] = {
     "nodyn": {
         "environment": env.NoDynamics,
-        "total_timesteps": 50_000,
     },
     "recon": {
         "environment": env.Reconstruction,
         "n_dims": 1,
-        "total_timesteps": 200_000,
     },
     "sig": {
         "environment": env.Signal,
         "n_dims": 5,
         "n_opts": 2,
-        "total_timesteps": 200_000,
     },
     "nav": {
-        "total_timesteps": 50_000,
         "environment": env.NavToCenter,
     },
 }
@@ -85,7 +81,7 @@ def make_config_set(name: str, func: Callable) -> Mapping[str, ConfigSet]:
 
 
 def _timesteps(base: Config) -> ConfigSet:
-    for x in log_range(500_000, 100, N_ITERS):
+    for x in log_range(1_000_000, 100, N_ITERS):
         ef = min(default_config.eval_freq, x // 5)
         yield {
             **base,

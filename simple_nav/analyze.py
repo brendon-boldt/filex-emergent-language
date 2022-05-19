@@ -6,6 +6,7 @@ import math
 from joblib import Parallel, delayed  # type: ignore
 
 from scipy.stats import linregress, kendalltau  # type: ignore
+from scipy.ndimage import gaussian_filter  # type: ignore
 from matplotlib import pyplot as plt  # type: ignore
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -84,20 +85,46 @@ def analyze_correlation(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         fig = plt.figure(figsize=(2, 1.5))
         ax = fig.add_axes([0, 0, 1, 1])
         if dep_var == "entropy":
-            ax.set_ylim(-0.5, 6.5)
+            ax.set_ylim(-0.5, 7.0)
         elif dep_var == "steps":
             ax.set_ylim(5.5, 13)
             pass
 
-        from scipy.ndimage.filters import gaussian_filter
         group.sort_values(ind_var, inplace=True)
-        smoothed = gaussian_filter(group[dep_var], sigma=4)
+        smoothed = gaussian_filter(group[dep_var], sigma=30)
+
+        if ind_var != "bottleneck_size_log":
+            ax.plot(
+                [group[ind_var].min(), group[ind_var].max()],
+                [6, 6],
+                alpha=0.2,
+                linestyle="--",
+                color="gray",
+            )
+            ax.plot(
+                [group[ind_var].min(), group[ind_var].max()],
+                [0, 0],
+                alpha=0.2,
+                linestyle="--",
+                color="gray",
+            )
+
         ax.plot(group[ind_var], smoothed)
-        ax.scatter(group[ind_var], group[dep_var], s=2.0, color='gray')
+        alpha = 200 / len(group[ind_var])
+        ax.scatter(group[ind_var], group[dep_var], s=2.0, color="gray", alpha=alpha)
 
         sgn = "−" if result.correlation < 0 else "+"
         val = abs(result.correlation)
-        ax.text(0.65, 0.9, f"τ: {sgn}{val:.2f}", transform=ax.transAxes, fontfamily="monospace")
+        ax.text(
+            0.05,
+            0.9,
+            f"τ: {sgn}{val:.2f}",
+            transform=ax.transAxes,
+            fontfamily="monospace",
+        )
+
+        ax.set_xticks([])
+        ax.set_yticks([])
 
         # ticks: Optional[List[Union[int, float]]] = None
         # func: Callable
@@ -143,29 +170,30 @@ def apply_transforms(x_data: np.ndarray, transforms: List, mps: Tuple) -> np.nda
         x_data = t[1](x_data, mp)
     return x_data
 
+
 TRANSFORMS = {
     "learning_rate_log": [
-            ("data + x", lambda data, x: data + x, np.linspace(-10, 0, 1000)),
-            ("data * x", lambda data, x: data * x, 10 ** log_range(1e-2, 1e0, 1000)),
-        ]
-        }
+        ("data + x", lambda data, x: data + x, np.linspace(-10, 0, 1000)),
+        ("data * x", lambda data, x: data * x, 10 ** log_range(1e-2, 1e0, 1000)),
+    ]
+}
+
 
 def fit_metparameters(
-        ind_var: str,
-        x_real: np.ndarray,
-        y_real: np.ndarray,
-        x_model: np.ndarray,
-        y_model: np.ndarray, 
-        ) -> Tuple[Tuple, float]:
+    ind_var: str,
+    x_real: np.ndarray,
+    y_real: np.ndarray,
+    x_model: np.ndarray,
+    y_model: np.ndarray,
+) -> Tuple[Tuple, float]:
     results: list = []
     tfs = TRANSFORMS[ind_var]
-    
+
     for mps in product(*(t[2] for t in tfs)):
         x_model_t = apply_transforms(x_model, tfs, mps)
-        idxs = np.array([
-            np.abs(x_real[i] - x_model_t).argmin()
-            for i in range(len(x_real))
-        ])
+        idxs = np.array(
+            [np.abs(x_real[i] - x_model_t).argmin() for i in range(len(x_real))]
+        )
         error = ((y_model[idxs] - y_real) ** 2).mean()
         # print(f"{s:+.1f} {m:+.1f}: {np.log10(error):.1f}")
         results.append((mps, error))
@@ -174,10 +202,10 @@ def fit_metparameters(
     for r in results[:20]:
         print(f"{r[0][0]:.2f} {r[0][1]:.2f} = {r[1]:.4f}")
     return results[0]
-    
+
 
 def align_data(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
-    model_data_path = cfg['model_data_path']
+    model_data_path = cfg["model_data_path"]
     ind_var = cfg["ind_var"]
     dep_var = cfg["dep_var"]
 
@@ -194,11 +222,13 @@ def align_data(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
         model_xs = np.log10(model_xs)
     model_plot_alpha = min(1, 0.02 * 10_000 / len(model_xs))
 
-    mps, error = fit_metparameters(ind_var, df[ind_var].to_numpy(), df[dep_var].to_numpy(), model_xs, model_ys)
+    mps, error = fit_metparameters(
+        ind_var, df[ind_var].to_numpy(), df[dep_var].to_numpy(), model_xs, model_ys
+    )
     tfs = TRANSFORMS[ind_var]
     model_xs = apply_transforms(model_xs, tfs, mps)
     print("Best transform parameters")
-    for t, mp in  zip(tfs, mps):
+    for t, mp in zip(tfs, mps):
         print(f"`{t[0]}` where x={mp:.2f}")
     print(f"Error: {error:.4f}")
 
@@ -208,6 +238,7 @@ def align_data(df: pd.DataFrame, cfg: Dict[str, Any]) -> None:
     plt.savefig(cfg["path"] / f"{fn}.pdf", bbox_inches="tight", format="pdf")
     plt.savefig(cfg["path"] / f"{fn}.png", bbox_inches="tight", format="png")
     plt.close()
+
 
 def preprocess_data(df: pd.DataFrame, cfg: Dict) -> None:
     if cfg.get("drop_unsuccessful", True):
@@ -237,24 +268,25 @@ def preprocess_data(df: pd.DataFrame, cfg: Dict) -> None:
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("command", type=str)
-    parser.add_argument("analysis", type=str)
+    parser.add_argument("analyses", type=str, nargs="+")
     return parser.parse_args()
 
 
 def main() -> None:
     args = get_args()
 
-    if args.analysis not in analysis_configs.configs:
-        print(f'Analysis named "{args.analysis}" is not in analysis_configs.')
-        return
+    for analysis in args.analyses:
+        if analysis not in analysis_configs.configs:
+            print(f'Analysis named "{args.analysis}" is not in analysis_configs.')
+            continue
 
-    cfg = analysis_configs.configs[args.analysis]
+        cfg = analysis_configs.configs[analysis]
 
-    data_path = Path(cfg["path"])
-    dataframe = pd.read_csv(data_path / "data.csv").fillna("None")
-    preprocess_data(dataframe, cfg)
+        data_path = Path(cfg["path"])
+        dataframe = pd.read_csv(data_path / "data.csv").fillna("None")
+        preprocess_data(dataframe, cfg)
 
-    if cfg["type"] == "correlation":
-        analyze_correlation(dataframe, cfg)
-    if cfg["type"] == "align":
-        align_data(dataframe, cfg)
+        if cfg["type"] == "correlation":
+            analyze_correlation(dataframe, cfg)
+        if cfg["type"] == "align":
+            align_data(dataframe, cfg)
